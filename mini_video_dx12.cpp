@@ -268,6 +268,8 @@ int main(int argc, char* argv[])
 		heap_properties.Type = D3D12_HEAP_TYPE_UPLOAD;
 		hr = device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&bitstream_buffer));
 		assert(SUCCEEDED(hr));
+		hr = bitstream_buffer->SetName(L"bitstream_buffer");
+		assert(SUCCEEDED(hr));
 
 		void* mapped_data = nullptr;
 		hr = bitstream_buffer->Map(0, nullptr, &mapped_data);
@@ -314,6 +316,8 @@ int main(int argc, char* argv[])
 		heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
 		hr = device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dpb_texture));
 		assert(SUCCEEDED(hr));
+		hr = dpb_texture->SetName(L"dpb_texture");
+		assert(SUCCEEDED(hr));
 	}
 
 	// If D3D12_RESOURCE_FLAG_VIDEO_DECODE_REFERENCE_ONLY is required, then there must be output conversion in the decoder:
@@ -332,6 +336,8 @@ int main(int argc, char* argv[])
 		D3D12_HEAP_PROPERTIES heap_properties = {};
 		heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
 		hr = device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dpb_output_texture));
+		assert(SUCCEEDED(hr));
+		hr = dpb_output_texture->SetName(L"dpb_output_texture");
 		assert(SUCCEEDED(hr));
 	}
 
@@ -354,6 +360,8 @@ int main(int argc, char* argv[])
 			D3D12_HEAP_PROPERTIES heap_properties = {};
 			heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
 			HRESULT hr = device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&texture));
+			assert(SUCCEEDED(hr));
+			hr = texture->SetName(L"DecodeResultReordered::texture");
 			assert(SUCCEEDED(hr));
 		}
 	};
@@ -492,7 +500,11 @@ int main(int argc, char* argv[])
 		assert(SUCCEEDED(hr));
 		device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&graphics_fence));
 		assert(SUCCEEDED(hr));
+		hr = graphics_fence->SetName(L"graphics_fence");
+		assert(SUCCEEDED(hr));
 		device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&video_fence));
+		assert(SUCCEEDED(hr));
+		hr = video_fence->SetName(L"video_fence");
 		assert(SUCCEEDED(hr));
 	}
 
@@ -618,6 +630,8 @@ int main(int argc, char* argv[])
 		heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
 		hr = device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&swapchain_uav));
 		assert(SUCCEEDED(hr));
+		hr = swapchain_uav->SetName(L"swapchain_uav");
+		assert(SUCCEEDED(hr));
 
 		printf("swapchain resized, new size: %d x %d\n", (int)swapchain_width, (int)swapchain_height);
 	};
@@ -681,15 +695,17 @@ int main(int argc, char* argv[])
 			if (dpb_layouts[video.current_slot] != D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE)
 			{
 				// if current DPB slot is not in DPB layout, transition it now:
-				D3D12_RESOURCE_BARRIER barrier = {};
-				barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-				barrier.Transition.pResource = dpb_texture.Get();
-				barrier.Transition.StateBefore = dpb_layouts[video.current_slot];
-				barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE;
-				barrier.Transition.Subresource = video.current_slot; // luma plane
-				video_cmd->ResourceBarrier(1, &barrier);
-				barrier.Transition.Subresource = video.num_dpb_slots + video.current_slot; // chroma plane
-				video_cmd->ResourceBarrier(1, &barrier);
+				D3D12_RESOURCE_BARRIER barriers[2] = {};
+				for (auto& barrier : barriers)
+				{
+					barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+					barrier.Transition.pResource = dpb_texture.Get();
+					barrier.Transition.StateBefore = dpb_layouts[video.current_slot];
+					barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE;
+				}
+				barriers[0].Transition.Subresource = video.current_slot; // luma plane
+				barriers[1].Transition.Subresource = video.num_dpb_slots + video.current_slot; // chroma plane
+				video_cmd->ResourceBarrier(arraysize(barriers), barriers);
 				dpb_layouts[video.current_slot] = D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE;
 			}
 			if (reference_only_allocation)
@@ -896,15 +912,17 @@ int main(int argc, char* argv[])
 			}
 			else
 			{
-				D3D12_RESOURCE_BARRIER barrier = {};
-				barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-				barrier.Transition.pResource = dpb_texture.Get();
-				barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE;
-				barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COMMON;
-				barrier.Transition.Subresource = video.current_slot; // luma plane
-				video_cmd->ResourceBarrier(1, &barrier);
-				barrier.Transition.Subresource = video.num_dpb_slots + video.current_slot; // chroma plane
-				video_cmd->ResourceBarrier(1, &barrier);
+				D3D12_RESOURCE_BARRIER barriers[2] = {};
+				for (auto& barrier : barriers)
+				{
+					barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+					barrier.Transition.pResource = dpb_texture.Get();
+					barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE;
+					barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COMMON;
+				}
+				barriers[0].Transition.Subresource = video.current_slot; // luma plane
+				barriers[1].Transition.Subresource = video.num_dpb_slots + video.current_slot; // chroma plane
+				video_cmd->ResourceBarrier(arraysize(barriers), barriers);
 				dpb_layouts[video.current_slot] = D3D12_RESOURCE_STATE_COMMON;
 			}
 
@@ -943,7 +961,8 @@ int main(int argc, char* argv[])
 			if (reordered_results_free.empty())
 			{
 				// Request new image, because there is no more free ones that we can use:
-				reordered_results_free.emplace_back().create(device.Get(), video.padded_width, video.padded_height);
+				reordered_results_free.emplace_back();
+				reordered_results_free.back().create(device.Get(), video.padded_width, video.padded_height);
 			}
 
 			// Copy will be done from decoder output to the newly allocated reordered picture:
