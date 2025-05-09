@@ -366,7 +366,7 @@ int main(int argc, char* argv[])
 				assert(SUCCEEDED(hr));
 
 				std::vector<uint8_t> shadersourcedata;
-				std::ifstream shadersourcefile("include/yuv_to_rgbCS.hlsl", std::ios::binary | std::ios::ate);
+				std::ifstream shadersourcefile("yuv_to_rgbCS.hlsl", std::ios::binary | std::ios::ate);
 				if (shadersourcefile.is_open())
 				{
 					size_t dataSize = (size_t)shadersourcefile.tellg();
@@ -1039,7 +1039,8 @@ int main(int argc, char* argv[])
 			uav_desc.Format = swapchain_format;
 			cpu_handle.ptr += descriptor_size;
 			device->CreateUnorderedAccessView(swapchain_uav.Get(), nullptr, &uav_desc, cpu_handle); // RWTexture2D<unorm float4> output : register(u0);
-			graphics_cmd->SetComputeRootDescriptorTable(0, descriptor_heap->GetGPUDescriptorHandleForHeapStart());
+			graphics_cmd->SetComputeRootDescriptorTable(1, descriptor_heap->GetGPUDescriptorHandleForHeapStart());
+			graphics_cmd->SetComputeRoot32BitConstants(0, 2, &video.width, 0); // set video width and height
 			graphics_cmd->Dispatch((swapchain_width + 7u) / 8u, (swapchain_height + 7u) / 8u, 1); // shader runs 8x8 threadgroup
 
 			// reverse barriers

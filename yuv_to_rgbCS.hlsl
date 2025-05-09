@@ -6,17 +6,34 @@
 [[vk::binding(2)]] Texture2D<float2> input_chrominance : register(t1);
 [[vk::binding(3)]] [[vk::image_format("rgba8")]] RWTexture2D<unorm float4> output : register(u0);
 
-[RootSignature("DescriptorTable(SRV(t0, numDescriptors = 2), UAV(u0)), StaticSampler(s0, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP, filter = FILTER_MIN_MAG_MIP_LINEAR)")]
+struct VideoConstants
+{
+	uint width;	 // without decoder padding
+	uint height; // without decoder padding
+};
+
+#ifdef __spirv__
+[[vk::push_constant]] VideoConstants video;
+#else
+ConstantBuffer<VideoConstants> video : register(b0);
+#endif // __spriv__
+
+[RootSignature("RootConstants(num32BitConstants=4, b0), DescriptorTable(SRV(t0, numDescriptors = 2), UAV(u0)), StaticSampler(s0, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP, filter = FILTER_MIN_MAG_MIP_LINEAR)")]
 [numthreads(8, 8, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
-	uint2 dim;
-	output.GetDimensions(dim.x, dim.y);
+	uint2 padded_dim;
+	input_luminance.GetDimensions(padded_dim.x, padded_dim.y);
 	
-	const float2 uv = float2((DTid.xy + 0.5f) / (float2)dim.xy);
+	uint2 output_dim;
+	output.GetDimensions(output_dim.x, output_dim.y);
+	const float2 output_uv = float2((DTid.xy + 0.5f) / (float2)output_dim.xy);
+	
+	const float2 pixel_nonpadded = output_uv * float2(video.width, video.height);
+	const float2 padded_uv = pixel_nonpadded / padded_dim; // this avoids sampling over the region which is padded and remains inside the original video resolution boundary
 
-	float luminance = input_luminance.SampleLevel(sampler_linear, uv, 0);
-	float2 chrominance = input_chrominance.SampleLevel(sampler_linear, uv, 0);
+	float luminance = input_luminance.SampleLevel(sampler_linear, padded_uv, 0);
+	float2 chrominance = input_chrominance.SampleLevel(sampler_linear, padded_uv, 0);
 
 	// https://learn.microsoft.com/en-us/windows/win32/medfound/recommended-8-bit-yuv-formats-for-video-rendering#converting-8-bit-yuv-to-rgb888
 	float C = luminance - 16.0 / 255.0;

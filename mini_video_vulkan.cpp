@@ -906,7 +906,7 @@ int main(int argc, char* argv[])
 				assert(SUCCEEDED(hr));
 
 				std::vector<uint8_t> shadersourcedata;
-				std::ifstream shadersourcefile("include/yuv_to_rgbCS.hlsl", std::ios::binary | std::ios::ate);
+				std::ifstream shadersourcefile("yuv_to_rgbCS.hlsl", std::ios::binary | std::ios::ate);
 				if (shadersourcefile.is_open())
 				{
 					size_t dataSize = (size_t)shadersourcefile.tellg();
@@ -1020,10 +1020,16 @@ int main(int argc, char* argv[])
 		res = vkCreateDescriptorSetLayout(device, &descriptorInfo, nullptr, &descriptor_set_layout);
 		assert(res == VK_SUCCESS);
 
+		VkPushConstantRange push_constants = {};
+		push_constants.size = sizeof(uint32_t) * 2;
+		push_constants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
 		VkPipelineLayoutCreateInfo layoutInfo = {};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 		layoutInfo.pSetLayouts = &descriptor_set_layout;
 		layoutInfo.setLayoutCount = 1;
+		layoutInfo.pPushConstantRanges = &push_constants;
+		layoutInfo.pushConstantRangeCount = 1;
 		res = vkCreatePipelineLayout(device, &layoutInfo, nullptr, &pipeline_layout);
 		assert(res == VK_SUCCESS);
 
@@ -1773,6 +1779,8 @@ int main(int argc, char* argv[])
 		vkCmdBindDescriptorSets(graphics_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
 
 		vkCmdBindPipeline(graphics_cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+
+		vkCmdPushConstants(graphics_cmd, pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t) * 2, &video.width); // send width and height with push constants to shader
 
 		// Dispatch compute shader with 8x8 threadgroup to resolve decode output Luminance + Chrominance image planes into RGB texture:
 		//	(the shader directly writes into the swapchain texture)

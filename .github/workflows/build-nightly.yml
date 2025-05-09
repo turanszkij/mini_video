@@ -1,0 +1,28 @@
+name: Nightly Build
+
+on:
+  schedule:
+    - cron:  '0 0 * * *'
+
+jobs:
+  
+  windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Build
+      shell: cmd
+      run: build.bat
+      
+    - name: Package
+      uses: actions/upload-artifact@v4
+      with:
+        name: mini_video
+        path: |
+          mini_video_dx12.exe
+          mini_video_vulkan.exe
+          dxcompiler.dll
+          dxil.dll
+          yuv_to_rgbCS.hlsl
+
