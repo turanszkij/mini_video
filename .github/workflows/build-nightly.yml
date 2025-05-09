@@ -25,4 +25,5 @@ jobs:
           dxcompiler.dll
           dxil.dll
           yuv_to_rgbCS.hlsl
+          test.mp4
 
