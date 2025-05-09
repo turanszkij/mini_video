@@ -1,32 +1,61 @@
 # Mini Video Sample [![Github Build Status](https://github.com/turanszkij/mini_video/workflows/Build/badge.svg)](https://github.com/turanszkij/mini_video/actions)
 
-This sample shows how to use the Vulkan and DirectX 12 graphics API to decode H264 videos in the most straightforward way. This means no external dependencies used, everything that you need to get started is right here in one place, with full source code in C++.
+This sample shows how to use the Vulkan and DirectX 12 graphics API to decode H264 videos without any external dependencies.
 
-This program displays a simple video in a window, running continuously:
+A screenshot of this program:
 
 ![screenshot](include/screenshot.png?raw=true "Screenshot")
 
 Why use GPU video decoding:
 
-The focus is to use the fastest path of GPU decoding, without any CPU intervention more than absolutely necessary. Because the whole decoding process is entirely handled by Vulkan or DirectX 12 API by using their native resource types, this solution is the most optimal way of decoding a video in games which already use the same type of GPU resources. Applying videos in <a href = "https://youtu.be/c1y38w8BZKw?si=O21RdHJtLeHPpBbU">in the game world</a> straight from decoded resources becomes just as trivial as using any other texture while still using the optimized video compression codecs. Furthermore, you get full access to async compute functionality with the harware video decoding queue to get the most out of parallel GPU execution (decoding a video while rendering unrelated things at the same time). Check out <a href = "https://github.com/turanszkij/WickedEngine">Wicked Engine</a> for a full implementation of GPU video decoding in a game engine with fully leveraging async video decoding and using video textures for materials and lights in the 3D world.
+The focus is to use the fastest path of GPU decoding, without any more CPU usage than absolutely necessary. Because the whole decoding process is entirely handled by Vulkan or DirectX 12 API by using their native resource types, this solution is the most optimal way of decoding a video in games which already use the same type of GPU resources. Applying videos <a href = "https://youtu.be/c1y38w8BZKw?si=O21RdHJtLeHPpBbU">in the game world</a> from decoded resources becomes just as trivial as using any other texture while still using the optimized video compression codecs, there is no need to interface with an other library. Furthermore, you get full access to async compute functionality with the video decoding hardware to get the most out of parallel GPU execution (decoding a video while rendering unrelated things at the same time). Check out <a href = "https://github.com/turanszkij/WickedEngine">Wicked Engine</a> for a full implementation of GPU video decoding in a game engine with fully leveraging async video decoding and using video textures for materials and lights in the 3D world.
+
+Platform
+- Windows: Visual Studio compiler with at least C++ 17 support is required (use `/std:c++17` in Visual Studio)
 
 How to build:
-- Requires a Visual Studio compiler with at least C++ 17 support
-- Use the provided `build.bat` to compile both `mini_video_vulkan.cpp` and `mini_video_dx12.cpp` into exes (tested on Windows 10)
+- Use the provided `build.bat` to compile both `mini_video_vulkan.cpp` and `mini_video_dx12.cpp` into exes
 
-How to a load different video:
-- enter the video name as startup argument, for example: `video.mp4` (only mp4 can be opened with a startup argument)
+How to use:
+- run `mini_video_vulkan.exe` or `mini_video_dx12.exe`, it will play `test.mp4` by default
+- enter the video name as command line argument, for example: `video.mp4`
 
 Features:
-- Opening MP4 files which contain H264 data with AVCC layout (done by the <a href = "https://github.com/lieff/minimp4">minimp4</a> header only library)
+- Opening MP4 files which contain H264 data with AVCC layout
 - Opening raw Annex-B style H264 bitstream
-- DirectX 12 API support with validation when built in Debug mode
-- Vulkan API support with validation when built in Debug mode
+- DirectX 12 API with validation support when built in Debug mode (if `_DEBUG` is defined)
+- Vulkan API with validation support when built in Debug mode (if `_DEBUG` is defined)
 
 Limitations:
 - Only H264 compression is supported currently
 - Probably a lot of H264 features are untested
-- Some frame pacing issues can be observed in some videos
+- Some videos can have frame pacing issues
+- Differences in decoding results might occur with different GPUs
+- Audio is not handled
+
+Libraries used:
+- <a href = "https://github.com/lieff/minimp4">minimp4</a> (to load H264 data from MP4 file)
+- <a href = "https://github.com/turanszkij/mini_video/blob/master/include/h264.h">H264 parser</a> (to extract encoding metadata from H264 format)
+- <a href = "https://github.com/KhronosGroup/Vulkan-Headers">Vulkan Headers</a> (to use Vulkan without installing the Vulkan SDK)
+- <a href = "https://github.com/zeux/volk">volk</a> (to use Vulkan without installing the Vulkan SDK)
+- <a href = "https://github.com/microsoft/DirectXShaderCompiler">DirectXShaderCompiler</a> (to compile HLSL shaders for Vulkan and DirectX 12)
+
+Structure of the program:
+- `include/common.h` contains the logical `Video` description structure and some other helpers
+- `mini_video_vulkan.cpp` contains the Vulkan code and the `main()` function
+- `mini_video_dx12.cpp` contains the DX12 code and the `main()` function
+- `include/yuv_to_rgbCS.hlsl` contains the compute shader program that outputs the video to the screen while converting YUV color to RGB
+- The `main()` function does roughly the same things in both cases, just expressed with a different APIs:
+  - Create the device object which interfaces with the GPU
+  - Creates the video decoder object and memory allocation for it
+  - Creates GPU buffer and copies the whole H264 bitstream into it
+  - Creates the DPB texture 2D array which is responsible to hold the decoding reference frames
+  - Compiles the `include/yuv_to_rgbCS.hlsl` shader and creates compute pipeline state from it
+  - Creates graphics and video command queues and command lists
+  - Creates the window
+  - Creates the swapchain for the window
+  - runs an infinite loop until the application is closed and loops the video frames
+  - waits for GPU completion and destroys resources
 
 License: MIT
 
