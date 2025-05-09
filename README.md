@@ -11,7 +11,7 @@ Why use GPU video decoding:
 The focus is to use the fastest path of GPU decoding, without any more CPU usage than absolutely necessary. Because the whole decoding process is entirely handled by Vulkan or DirectX 12 API by using their native resource types, this solution is the most optimal way of decoding a video in games which already use the same type of GPU resources. Applying videos <a href = "https://youtu.be/c1y38w8BZKw?si=O21RdHJtLeHPpBbU">in the game world</a> from decoded resources becomes just as trivial as using any other texture while still using the optimized video compression codecs, there is no need to interface with an other library. Furthermore, you get full access to async compute functionality with the video decoding hardware to get the most out of parallel GPU execution (decoding a video while rendering unrelated things at the same time). Check out <a href = "https://github.com/turanszkij/WickedEngine">Wicked Engine</a> for a full implementation of GPU video decoding in a game engine with fully leveraging async video decoding and using video textures for materials and lights in the 3D world.
 
 Platform:
-- Windows: Visual Studio compiler with at least C++ 17 support is required (use `/std:c++17` in Visual Studio)
+- Windows: Visual Studio compiler
 
 How to build:
 - Use the provided `build.bat` to compile both `mini_video_vulkan.cpp` and `mini_video_dx12.cpp` into exes
