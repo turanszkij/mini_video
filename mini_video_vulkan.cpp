@@ -229,7 +229,6 @@ int main(int argc, char* argv[])
 		res = vkGetPhysicalDeviceVideoCapabilitiesKHR(physicalDevice, &video_capability_h264.profile, &video_capability_h264.video_capabilities);
 		assert(res == VK_SUCCESS);
 
-
 		// Find queue families:
 		std::vector<VkQueueFamilyProperties2> queueFamilies;
 		std::vector<VkQueueFamilyVideoPropertiesKHR> queueFamiliesVideo;
@@ -312,6 +311,19 @@ int main(int argc, char* argv[])
 
 		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &device_memory_properties);
 	}
+
+	// Debug object name helper:
+	static auto set_name = [&](uint64_t handle, VkObjectType type, const char* name) {
+		if (!debugUtils)
+			return;
+		VkDebugUtilsObjectNameInfoEXT name_info = {};
+		name_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
+		name_info.objectType = type;
+		name_info.pObjectName = name;
+		name_info.objectHandle = handle;
+		res = vkSetDebugUtilsObjectNameEXT(device, &name_info);
+		assert(res == VK_SUCCESS);
+	};
 
 	// Create bitstream GPU buffer and copy compressed video data into it:
 	VkBuffer bitstream_buffer = VK_NULL_HANDLE;
@@ -419,6 +431,7 @@ int main(int argc, char* argv[])
 		image_info.pNext = &profile_list_info;
 		res = vkCreateImage(device, &image_info, nullptr, &dpb_image);
 		assert(res == VK_SUCCESS);
+		set_name((uint64_t)dpb_image, VK_OBJECT_TYPE_IMAGE, "dpb_image");
 
 		VkMemoryRequirements image_memory_requirements = {};
 		vkGetImageMemoryRequirements(device, dpb_image, &image_memory_requirements);
@@ -455,6 +468,7 @@ int main(int argc, char* argv[])
 		view_desc.pNext = &viewUsageInfo;
 		res = vkCreateImageView(device, &view_desc, nullptr, &dpb_image_view);
 		assert(res == VK_SUCCESS);
+		set_name((uint64_t)dpb_image_view, VK_OBJECT_TYPE_IMAGE_VIEW, "dpb_image_view");
 	}
 
 	// Create separate decode output if VK_VIDEO_DECODE_CAPABILITY_DPB_AND_OUTPUT_COINCIDE_BIT_KHR is not supported:
@@ -484,6 +498,7 @@ int main(int argc, char* argv[])
 		image_info.pNext = &profile_list_info;
 		res = vkCreateImage(device, &image_info, nullptr, &decode_output_image);
 		assert(res == VK_SUCCESS);
+		set_name((uint64_t)decode_output_image, VK_OBJECT_TYPE_IMAGE, "decode_output_image");
 
 		VkMemoryRequirements image_memory_requirements = {};
 		vkGetImageMemoryRequirements(device, decode_output_image, &image_memory_requirements);
@@ -516,6 +531,7 @@ int main(int argc, char* argv[])
 		view_desc.pNext = &viewUsageInfo;
 		res = vkCreateImageView(device, &view_desc, nullptr, &decode_output_image_view);
 		assert(res == VK_SUCCESS);
+		set_name((uint64_t)decode_output_image_view, VK_OBJECT_TYPE_IMAGE_VIEW, "decode_output_image_view");
 	}
 
 	struct DecodeResultReordered
@@ -544,6 +560,7 @@ int main(int argc, char* argv[])
 			image_info.flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
 			VkResult res = vkCreateImage(device, &image_info, nullptr, &image);
 			assert(res == VK_SUCCESS);
+			set_name((uint64_t)image, VK_OBJECT_TYPE_IMAGE, "DecodeResultReordered::image");
 
 			VkMemoryRequirements image_memory_requirements = {};
 			vkGetImageMemoryRequirements(device, image, &image_memory_requirements);
@@ -580,10 +597,12 @@ int main(int argc, char* argv[])
 			view_desc.format = VK_FORMAT_R8_UNORM;
 			res = vkCreateImageView(device, &view_desc, nullptr, &image_view_luminance);
 			assert(res == VK_SUCCESS);
+			set_name((uint64_t)image_view_luminance, VK_OBJECT_TYPE_IMAGE_VIEW, "DecodeResultReordered::image_view_luminance");
 			view_desc.subresourceRange.aspectMask = VK_IMAGE_ASPECT_PLANE_1_BIT;
 			view_desc.format = VK_FORMAT_R8G8_UNORM;
 			res = vkCreateImageView(device, &view_desc, nullptr, &image_view_chrominance);
 			assert(res == VK_SUCCESS);
+			set_name((uint64_t)image_view_chrominance, VK_OBJECT_TYPE_IMAGE_VIEW, "DecodeResultReordered::image_view_chrominance");
 		}
 		void destroy(VkDevice device)
 		{
@@ -1245,18 +1264,21 @@ int main(int argc, char* argv[])
 			view_info.subresourceRange.layerCount = 1;
 			res = vkCreateImageView(device, &view_info, nullptr, &swapchain_image_views[i]);
 			assert(res == VK_SUCCESS);
+			set_name((uint64_t)swapchain_image_views[i], VK_OBJECT_TYPE_IMAGE_VIEW, "swapchain_image_view");
 		}
 
 		VkSemaphoreCreateInfo semaphore_info = {};
 		semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 		res = vkCreateSemaphore(device, &semaphore_info, nullptr, &swapchain_release_semaphore);
 		assert(res == VK_SUCCESS);
+		set_name((uint64_t)swapchain_release_semaphore, VK_OBJECT_TYPE_SEMAPHORE, "swapchain_release_semaphore");
 
 		swapchain_acquire_semaphores.resize(swapchain_images.size());
 		for (size_t i = 0; i < swapchain_image_views.size(); ++i)
 		{
 			res = vkCreateSemaphore(device, &semaphore_info, nullptr, &swapchain_acquire_semaphores[i]);
 			assert(res == VK_SUCCESS);
+			set_name((uint64_t)swapchain_acquire_semaphores[i], VK_OBJECT_TYPE_SEMAPHORE, "swapchain_acquire_semaphores");
 		}
 
 		printf("swapchain resized, new size: %d x %d\n", (int)swapchain_extent.width, (int)swapchain_extent.height);
@@ -1279,9 +1301,11 @@ int main(int argc, char* argv[])
 		poolInfo.queueFamilyIndex = videoFamily;
 		res = vkCreateCommandPool(device, &poolInfo, nullptr, &video_command_pool);
 		assert(res == VK_SUCCESS);
+		set_name((uint64_t)video_command_pool, VK_OBJECT_TYPE_COMMAND_POOL, "video_command_pool");
 		poolInfo.queueFamilyIndex = graphicsFamily;
 		res = vkCreateCommandPool(device, &poolInfo, nullptr, &graphics_command_pool);
 		assert(res == VK_SUCCESS);
+		set_name((uint64_t)graphics_command_pool, VK_OBJECT_TYPE_COMMAND_POOL, "graphics_command_pool");
 
 		VkCommandBufferAllocateInfo commandBufferInfo = {};
 		commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1301,11 +1325,13 @@ int main(int argc, char* argv[])
 		info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 		res = vkCreateSemaphore(device, &info, nullptr, &video_semaphore);
 		assert(res == VK_SUCCESS);
+		set_name((uint64_t)video_semaphore, VK_OBJECT_TYPE_SEMAPHORE, "video_semaphore");
 
 		VkFenceCreateInfo fenceInfo = {};
 		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 		res = vkCreateFence(device, &fenceInfo, nullptr, &fence);
 		assert(res == VK_SUCCESS);
+		set_name((uint64_t)fence, VK_OBJECT_TYPE_FENCE, "fence");
 	}
 
 	// Do the display frame loop:
@@ -1621,7 +1647,8 @@ int main(int argc, char* argv[])
 			if (reordered_results_free.empty())
 			{
 				// Request new image, because there is no more free ones that we can use:
-				reordered_results_free.emplace_back().create(device, video.padded_width, video.padded_height);
+				reordered_results_free.emplace_back();
+				reordered_results_free.back().create(device, video.padded_width, video.padded_height);
 			}
 
 			// Copy will be done from decoder output to the newly allocated reordered picture:
