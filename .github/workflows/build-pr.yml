@@ -1,4 +1,4 @@
-name: Nightly Build
+name: Pull Request Build
 
 on:
   pull_request
