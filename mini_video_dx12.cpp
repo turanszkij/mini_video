@@ -24,6 +24,14 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
+	if (video.frame_infos.empty())
+	{
+		printf("Video was loaded, but there are no frames, exiting.\n");
+		return -1;
+	}
+
+	printf("Video was loaded successfully and contains %d frames in total.\n", (int)video.frame_infos.size());
+
 	// Below this will be all the DirectX 12 code:
 	using namespace Microsoft::WRL;
 	HRESULT hr;
@@ -274,6 +282,9 @@ int main(int argc, char* argv[])
 			aligned_offset += align(frame_info.size, (uint64_t)D3D12_VIDEO_DECODE_MIN_BITSTREAM_OFFSET_ALIGNMENT);
 		}
 
+		// The h264_data is not required any longer to be in RAM because it has been copied to the GPU buffer, so I delete it:
+		video.h264_data.clear();
+
 		bitstream_buffer->Unmap(0, nullptr);
 	}
 
@@ -360,7 +371,7 @@ int main(int argc, char* argv[])
 				Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils;
 				Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
 
-				HRESULT hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
+				hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
 				assert(SUCCEEDED(hr));
 				hr = DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&dxcCompiler));
 				assert(SUCCEEDED(hr));
@@ -604,6 +615,7 @@ int main(int argc, char* argv[])
 		hr = device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&swapchain_uav));
 		assert(SUCCEEDED(hr));
 
+		printf("swapchain resized, new size: %d x %d\n", (int)swapchain_width, (int)swapchain_height);
 	};
 	create_swapchain();
 

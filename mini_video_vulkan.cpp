@@ -26,6 +26,14 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
+	if (video.frame_infos.empty())
+	{
+		printf("Video was loaded, but there are no frames, exiting.\n");
+		return -1;
+	}
+
+	printf("Video was loaded successfully and contains %d frames in total.\n", (int)video.frame_infos.size());
+
 	// Below this will be all the Vulkan code:
 	VkResult res;
 	res = volkInitialize();
@@ -360,6 +368,9 @@ int main(int argc, char* argv[])
 			frame_info.offset = aligned_offset;
 			aligned_offset += align(frame_info.size, bitstream_alignment);
 		}
+
+		// The h264_data is not required any longer to be in RAM because it has been copied to the GPU buffer, so I delete it:
+		video.h264_data.clear();
 
 		vkUnmapMemory(device, bitstream_buffer_memory);
 	}
@@ -1237,6 +1248,8 @@ int main(int argc, char* argv[])
 			res = vkCreateSemaphore(device, &semaphore_info, nullptr, &swapchain_acquire_semaphores[i]);
 			assert(res == VK_SUCCESS);
 		}
+
+		printf("swapchain resized, new size: %d x %d\n", (int)swapchain_extent.width, (int)swapchain_extent.height);
 	};
 	create_swapchain();
 
