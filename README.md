@@ -44,7 +44,7 @@ Structure of the program:
 - `include/common.h` contains the logical `Video` description structure and some other helpers
 - `mini_video_vulkan.cpp` contains the Vulkan code and the `main()` function
 - `mini_video_dx12.cpp` contains the DX12 code and the `main()` function
-- `yuv_to_rgbCS.hlsl` is the compute shader that outputs the video to the screen while converting YUV color to RGB
+- `yuv_to_rgbCS.hlsl` is a compute shader that converts the video from YUV to RGB and outputs to screen
 - The `main()` function does roughly the same things in both cases, just expressed with a different APIs:
   - Create the device object which interfaces with the GPU
   - Creates the video decoder object and memory allocation for it
