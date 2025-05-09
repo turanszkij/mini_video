@@ -124,8 +124,9 @@ struct Video
 					h264::NALHeader nal = {};
 					h264::read_nal_header(&nal, &bs);
 					assert(nal.type == h264::NAL_UNIT_TYPE_SPS);
-
-					h264::SPS& sps = sps_array.emplace_back();
+					
+					sps_array.emplace_back();
+					h264::SPS& sps = sps_array.back();
 					h264::read_sps(&sps, &bs);
 
 					// Some validation checks that data parsing returned expected values:
@@ -157,7 +158,8 @@ struct Video
 					h264::read_nal_header(&nal, &bs);
 					assert(nal.type == h264::NAL_UNIT_TYPE_PPS);
 
-					h264::PPS& pps = pps_array.emplace_back();
+					pps_array.emplace_back();
+					h264::PPS& pps = pps_array.back();
 					h264::read_pps(&pps, &bs);
 
 					index++;
@@ -173,7 +175,8 @@ struct Video
 				MP4D_file_offset_t ofs = MP4D_frame_offset(&mp4, ntrack, i, &frame_bytes, &timestamp, &duration);
 				track_duration += duration;
 
-				Video::FrameInfo& frame_info = frame_infos.emplace_back();
+				frame_infos.emplace_back();
+				Video::FrameInfo& frame_info = frame_infos.back();
 
 				const uint8_t* src_buffer = input_buf + ofs;
 				while (frame_bytes > 0)
@@ -203,7 +206,8 @@ struct Video
 						continue;
 					}
 
-					h264::SliceHeader& slice_header = slice_headers.emplace_back();
+					slice_headers.emplace_back();
+					h264::SliceHeader& slice_header = slice_headers.back();
 					h264::read_slice_header(&slice_header, &nal, pps_array.data(), sps_array.data(), &bs);
 
 					// Accept frame beginning NAL unit:
@@ -268,21 +272,25 @@ struct Video
 				{
 				case h264::NAL_UNIT_TYPE_CODED_SLICE_NON_IDR:
 				{
-					Video::FrameInfo& frame_info = frame_infos.emplace_back();
+					frame_infos.emplace_back();
+					Video::FrameInfo& frame_info = frame_infos.back();
 					frame_info.offset = nal_offset;
 					frame_info.is_intra = false;
 					frame_info.reference_priority = nal.idc;
-					h264::SliceHeader& slice_header = slice_headers.emplace_back();
+					slice_headers.emplace_back();
+					h264::SliceHeader& slice_header = slice_headers.back();
 					h264::read_slice_header(&slice_header, &nal, pps_array.data(), sps_array.data(), &bs);
 				}
 				break;
 				case h264::NAL_UNIT_TYPE_CODED_SLICE_IDR:
 				{
-					Video::FrameInfo& frame_info = frame_infos.emplace_back();
+					frame_infos.emplace_back();
+					Video::FrameInfo& frame_info = frame_infos.back();
 					frame_info.offset = nal_offset;
 					frame_info.is_intra = true;
 					frame_info.reference_priority = nal.idc;
-					h264::SliceHeader& slice_header = slice_headers.emplace_back();
+					slice_headers.emplace_back();
+					h264::SliceHeader& slice_header = slice_headers.back();
 					h264::read_slice_header(&slice_header, &nal, pps_array.data(), sps_array.data(), &bs);
 				}
 				break;
@@ -290,7 +298,8 @@ struct Video
 				{
 					if (sps_array.empty()) // TODO: multiple SPS fix
 					{
-						h264::SPS& sps = sps_array.emplace_back();
+						sps_array.emplace_back();
+						h264::SPS& sps = sps_array.back();
 						h264::read_sps(&sps, &bs);
 
 						width = ((sps.pic_width_in_mbs_minus1 + 1) * 16) - sps.frame_crop_left_offset * 2 - sps.frame_crop_right_offset * 2;
@@ -306,7 +315,8 @@ struct Video
 				{
 					if (pps_array.empty()) // TODO: multiple PPS fix
 					{
-						h264::PPS& pps = pps_array.emplace_back();
+						pps_array.emplace_back();
+						h264::PPS& pps = pps_array.back();
 						h264::read_pps(&pps, &bs);
 					}
 				}
