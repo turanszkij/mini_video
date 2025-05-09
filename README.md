@@ -57,6 +57,14 @@ Structure of the program:
   - runs an infinite loop until the application is closed and loops the video frames
   - waits for GPU completion and destroys resources
 
+Possible future improvements:
+- H265 decoding
+- AV1 decoding
+- HDR video
+- Linux support
+
+You can also read about my video decoding implementation in Wicked Engine (that this sample was based on) here: <a href = "https://wickedengine.net/2023/05/vulkan-video-decoding/">Wicked Engine Devblog</a>. 
+
 License: MIT
 
 Copyright (c) 2025 Turánszki János
