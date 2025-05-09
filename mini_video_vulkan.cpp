@@ -1185,6 +1185,16 @@ int main(int argc, char* argv[])
 		assert(res == VK_SUCCESS);
 
 		VkSurfaceFormatKHR surfaceFormat = swapchain_formats.front();
+		for (auto& x : swapchain_formats)
+		{
+			if (x.format == VK_FORMAT_R8G8B8A8_UNORM)
+			{
+				// prefer the VK_FORMAT_R8G8B8_UNORM format because the yuv_to_rgbCS.hlsl shader defines [[vk::image_format("rgba8")]]
+				//	this is just to shut up vulkan validator which can complain, but in reality it isn't a problem
+				surfaceFormat = x;
+				break;
+			}
+		}
 
 		VkSwapchainCreateInfoKHR swapchain_info = {};
 		swapchain_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
