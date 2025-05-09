@@ -306,6 +306,10 @@ int main(int argc, char* argv[])
 		{
 			desc.Flags = D3D12_RESOURCE_FLAG_VIDEO_DECODE_REFERENCE_ONLY | D3D12_RESOURCE_FLAG_DENY_SHADER_RESOURCE;
 		}
+		else
+		{
+			desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+		}
 		D3D12_HEAP_PROPERTIES heap_properties = {};
 		heap_properties.Type = D3D12_HEAP_TYPE_DEFAULT;
 		hr = device->CreateCommittedResource(&heap_properties, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&dpb_texture));
@@ -682,7 +686,9 @@ int main(int argc, char* argv[])
 				barrier.Transition.pResource = dpb_texture.Get();
 				barrier.Transition.StateBefore = dpb_layouts[video.current_slot];
 				barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE;
-				barrier.Transition.Subresource = video.current_slot;
+				barrier.Transition.Subresource = video.current_slot; // luma plane
+				video_cmd->ResourceBarrier(1, &barrier);
+				barrier.Transition.Subresource = video.num_dpb_slots + video.current_slot; // chroma plane
 				video_cmd->ResourceBarrier(1, &barrier);
 				dpb_layouts[video.current_slot] = D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE;
 			}
@@ -693,6 +699,7 @@ int main(int argc, char* argv[])
 				barrier.Transition.pResource = dpb_output_texture.Get();
 				barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
 				barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE;
+				barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 				video_cmd->ResourceBarrier(1, &barrier);
 			}
 
@@ -884,6 +891,7 @@ int main(int argc, char* argv[])
 				barrier.Transition.pResource = dpb_output_texture.Get();
 				barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE;
 				barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COMMON;
+				barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 				video_cmd->ResourceBarrier(1, &barrier);
 			}
 			else
@@ -893,7 +901,9 @@ int main(int argc, char* argv[])
 				barrier.Transition.pResource = dpb_texture.Get();
 				barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_VIDEO_DECODE_WRITE;
 				barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COMMON;
-				barrier.Transition.Subresource = video.current_slot;
+				barrier.Transition.Subresource = video.current_slot; // luma plane
+				video_cmd->ResourceBarrier(1, &barrier);
+				barrier.Transition.Subresource = video.num_dpb_slots + video.current_slot; // chroma plane
 				video_cmd->ResourceBarrier(1, &barrier);
 				dpb_layouts[video.current_slot] = D3D12_RESOURCE_STATE_COMMON;
 			}
@@ -942,28 +952,40 @@ int main(int argc, char* argv[])
 			reordered_current.display_order = video.frame_infos[video.frameIndex].display_order;
 			reordered_current.frame_index = video.frameIndex;
 
-			D3D12_TEXTURE_COPY_LOCATION cpy_src = {};
-			cpy_src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 			if (reference_only_allocation)
 			{
+				D3D12_TEXTURE_COPY_LOCATION cpy_src = {};
+				cpy_src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 				cpy_src.pResource = dpb_output_texture.Get();
+				D3D12_TEXTURE_COPY_LOCATION cpy_dst = {};
+				cpy_dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+				cpy_dst.pResource = reordered_current.texture.Get();
+
+				cpy_src.SubresourceIndex = 0; // luma plane
+				cpy_dst.SubresourceIndex = 0; // luma plane
+				graphics_cmd->CopyTextureRegion(&cpy_dst, 0, 0, 0, &cpy_src, nullptr);
+
+				cpy_src.SubresourceIndex = 1; // chroma plane
+				cpy_dst.SubresourceIndex = 1; // chroma plane
+				graphics_cmd->CopyTextureRegion(&cpy_dst, 0, 0, 0, &cpy_src, nullptr);
 			}
 			else
 			{
+				D3D12_TEXTURE_COPY_LOCATION cpy_src = {};
+				cpy_src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
 				cpy_src.pResource = dpb_texture.Get();
-				cpy_src.SubresourceIndex = video.current_slot;
+				D3D12_TEXTURE_COPY_LOCATION cpy_dst = {};
+				cpy_dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+				cpy_dst.pResource = reordered_current.texture.Get();
+
+				cpy_src.SubresourceIndex = video.current_slot; // luma plane
+				cpy_dst.SubresourceIndex = 0; // luma plane
+				graphics_cmd->CopyTextureRegion(&cpy_dst, 0, 0, 0, &cpy_src, nullptr);
+
+				cpy_src.SubresourceIndex = video.num_dpb_slots + video.current_slot; // chroma plane
+				cpy_dst.SubresourceIndex = 1; // chroma plane
+				graphics_cmd->CopyTextureRegion(&cpy_dst, 0, 0, 0, &cpy_src, nullptr);
 			}
-			D3D12_TEXTURE_COPY_LOCATION cpy_dst = {};
-			cpy_dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-			cpy_dst.pResource = reordered_current.texture.Get();
-
-			cpy_src.SubresourceIndex = 0; // luma plane
-			cpy_dst.SubresourceIndex = 0; // luma plane
-			graphics_cmd->CopyTextureRegion(&cpy_dst, 0, 0, 0, &cpy_src, nullptr);
-
-			cpy_src.SubresourceIndex = 1; // chroma plane
-			cpy_dst.SubresourceIndex = 1; // chroma plane
-			graphics_cmd->CopyTextureRegion(&cpy_dst, 0, 0, 0, &cpy_src, nullptr);
 
 			// Current latest reordered is pushed to the reorder working queue:
 			reordered_results_working.push_back(reordered_current);
