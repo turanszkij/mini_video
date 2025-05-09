@@ -1,5 +1,5 @@
-# Mini Video Sample
-[![Github Build Status](https://github.com/turanszkij/mini_video/workflows/Build/badge.svg)](https://github.com/turanszkij/mini_video/actions)
+# Mini Video Sample [![Github Build Status](https://github.com/turanszkij/mini_video/workflows/Build/badge.svg)](https://github.com/turanszkij/mini_video/actions)
+
 This repository shows how to use the Vulkan and DirectX 12 graphics API to decode H264 videos in the most straightforward way, without hiding anything from you. This means no external dependencies used, everything that you need to get started is right here, with full source code from loading a file with raw C++, extracting the H264 bitstream from it, parsing the metadata, then sending it to the GPU for decoding and finally displaying it on the screen. 
 
 This program displays a simple video in a window, running continuously:
