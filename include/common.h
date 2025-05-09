@@ -7,6 +7,8 @@
 #include <chrono>
 #include <algorithm>
 
+static_assert(sizeof(void*) == sizeof(uint64_t), "Error: only 64-bit build is supported!");
+
 #define MINIMP4_IMPLEMENTATION
 #include "minimp4.h"	// mp4 -> h264 extraction
 #include "h264.h"		// h264 parsing
