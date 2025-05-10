@@ -719,8 +719,6 @@ int main(int argc, char* argv[])
 				video_cmd->ResourceBarrier(1, &barrier);
 			}
 
-			auto D3D12CalcSubresource = [](UINT MipSlice, UINT ArraySlice, UINT PlaneSlice, UINT MipLevels, UINT ArraySize) noexcept { return MipSlice + ArraySlice * MipLevels + PlaneSlice * MipLevels * ArraySize; };
-
 			D3D12_VIDEO_DECODE_INPUT_STREAM_ARGUMENTS input = {};
 			D3D12_VIDEO_DECODE_OUTPUT_STREAM_ARGUMENTS output = {};
 			if (reference_only_allocation)
