@@ -32,9 +32,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install libx11-dev
+
     - name: Build
       run: |
-        sudo apt install libx11-dev
         chmod +x build_linux.sh
         ./build_linux.sh
 
