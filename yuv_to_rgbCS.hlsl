@@ -18,7 +18,7 @@ struct VideoConstants
 ConstantBuffer<VideoConstants> video : register(b0);
 #endif // __spriv__
 
-[RootSignature("RootConstants(num32BitConstants=4, b0), DescriptorTable(SRV(t0, numDescriptors = 2), UAV(u0)), StaticSampler(s0, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP, filter = FILTER_MIN_MAG_MIP_LINEAR)")]
+[RootSignature("RootConstants(num32BitConstants=2, b0), DescriptorTable(SRV(t0, numDescriptors = 2), UAV(u0)), StaticSampler(s0, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, addressW = TEXTURE_ADDRESS_CLAMP, filter = FILTER_MIN_MAG_MIP_LINEAR)")]
 [numthreads(8, 8, 1)]
 void main(uint3 DTid : SV_DispatchThreadID)
 {
