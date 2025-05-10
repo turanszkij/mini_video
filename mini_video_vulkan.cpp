@@ -1,7 +1,9 @@
 #include "include/common.h"
 
-#ifdef _WIN32
+#if defined(_WIN32)
 #define VK_USE_PLATFORM_WIN32_KHR
+#elif defined(__linux__)
+#define VK_USE_PLATFORM_XLIB_KHR
 #endif // _WIN32
 
 // The vulkan headers are included in the repository, but the prototypes are defined out to not try to statically link them
@@ -204,7 +206,7 @@ int main(int argc, char* argv[])
 
 		if (physicalDevice == VK_NULL_HANDLE)
 		{
-			printf("Failed to find a GPU that supports Vulkan H264 decoding!");
+			printf("Failed to find a GPU that supports Vulkan H264 decoding!\n");
 			return -3;
 		}
 
@@ -270,7 +272,7 @@ int main(int argc, char* argv[])
 
 		if (videoFamily == VK_QUEUE_FAMILY_IGNORED)
 		{
-			printf("Failed to find queue with VK_QUEUE_VIDEO_DECODE_BIT_KHR and VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR support!");
+			printf("Failed to find queue with VK_QUEUE_VIDEO_DECODE_BIT_KHR and VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR support!\n");
 			return -4;
 		}
 
@@ -921,14 +923,19 @@ int main(int argc, char* argv[])
 	VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
 	{
 		// Compile the shader with dxcompiler.dll:
+#if defined(_WIN32)
+        using namespace Microsoft::WRL;
 		HMODULE dxcompiler = LoadLibrary(L"dxcompiler.dll");
+#elif defined(__linux__)
+        void* dxcompiler = dlopen("dxcompiler.so", RTLD_LAZY);
+#endif // _WIN32
 		if (dxcompiler != nullptr)
 		{
 			DxcCreateInstanceProc  DxcCreateInstance = (DxcCreateInstanceProc)GetProcAddress(dxcompiler, "DxcCreateInstance");
 			if (DxcCreateInstance != nullptr)
 			{
-				Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils;
-				Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
+				ComPtr<IDxcUtils> dxcUtils;
+				ComPtr<IDxcCompiler3> dxcCompiler;
 
 				HRESULT hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
 				assert(SUCCEEDED(hr));
@@ -970,7 +977,7 @@ int main(int argc, char* argv[])
 					L"yuv_to_rgbCS.hlsl",
 				};
 
-				Microsoft::WRL::ComPtr<IDxcResult> pResults;
+				ComPtr<IDxcResult> pResults;
 				hr = dxcCompiler->Compile(
 					&Source,				// Source buffer.
 					args,					// Array of pointers to arguments.
@@ -980,7 +987,7 @@ int main(int argc, char* argv[])
 				);
 				assert(SUCCEEDED(hr));
 
-				Microsoft::WRL::ComPtr<IDxcBlobUtf8> pErrors = nullptr;
+				ComPtr<IDxcBlobUtf8> pErrors = nullptr;
 				hr = pResults->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&pErrors), nullptr);
 				assert(SUCCEEDED(hr));
 				if (pErrors != nullptr && pErrors->GetStringLength() != 0)
@@ -998,7 +1005,7 @@ int main(int argc, char* argv[])
 					return - 1;
 				}
 
-				Microsoft::WRL::ComPtr<IDxcBlob> pShader = nullptr;
+				ComPtr<IDxcBlob> pShader = nullptr;
 				hr = pResults->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&pShader), nullptr);
 				assert(SUCCEEDED(hr));
 				if (pShader != nullptr)
@@ -1098,7 +1105,7 @@ int main(int argc, char* argv[])
 	}
 
 	// Create window:
-#ifdef _WIN32
+#if defined(_WIN32)
 	HINSTANCE hInstance = NULL;
 	HWND hWnd = NULL;
 	{
@@ -1133,6 +1140,16 @@ int main(int argc, char* argv[])
 		hWnd = CreateWindowW(L"mini_video_vulkan", L"mini_video_vulkan", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, video.width, video.height, nullptr, nullptr, NULL, nullptr);
 		ShowWindow(hWnd, SW_SHOWDEFAULT);
 	}
+#elif defined(__linux__)
+    Display* display = XOpenDisplay(NULL);
+    if(display == nullptr) printf("XOpenDisplay failed!\n");
+    Window root = DefaultRootWindow(display);
+    if(root == None) printf("DefaultRootWindow failed!\n");
+    Window window = XCreateSimpleWindow(display, root, 0, 0, video.width, video.height, 0, 0, 0xffffffff);
+    if(window == None) printf("XCreateSimpleWindow failed!\n");
+    XMapWindow(display, window);
+    Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
+    XSetWMProtocols(display, window, & wm_delete_window, 1);
 #endif // _WIN32
 
 	// Create swap chain for the window to display the video:
@@ -1172,12 +1189,19 @@ int main(int argc, char* argv[])
 
 		VkSurfaceKHR swapchain_surface = VK_NULL_HANDLE;
 
-#ifdef _WIN32
+#if defined(_WIN32)
 		VkWin32SurfaceCreateInfoKHR surface_info = {};
 		surface_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
 		surface_info.hwnd = hWnd;
 		surface_info.hinstance = hInstance;
 		res = vkCreateWin32SurfaceKHR(instance, &surface_info, nullptr, &swapchain_surface);
+		assert(res == VK_SUCCESS);
+#elif defined(__linux__)
+        VkXlibSurfaceCreateInfoKHR surface_info = {};
+		surface_info.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+        surface_info.dpy = display;
+        surface_info.window = window;
+        res = vkCreateXlibSurfaceKHR(instance, &surface_info, nullptr, &swapchain_surface);
 		assert(res == VK_SUCCESS);
 #endif // _WIN32
 
@@ -1338,7 +1362,7 @@ int main(int argc, char* argv[])
 	bool exiting = false;
 	while (!exiting)
 	{
-#ifdef _WIN32
+#if defined(_WIN32)
 		// Handle window messages like resize, close, etc:
 		MSG msg = { 0 };
 		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -1347,6 +1371,13 @@ int main(int argc, char* argv[])
 			exiting = msg.message == WM_QUIT;
 			continue;
 		}
+#elif defined(__linux__)
+        XEvent event;
+        XNextEvent(display, &event);
+        if(event.type == ClientMessage) {
+            exiting = event.xclient.data.l[0] == wm_delete_window;
+            continue;
+        }
 #endif // WIN32
 
 		wait_semaphores.clear();
@@ -1936,6 +1967,11 @@ int main(int argc, char* argv[])
 	{
 		vkDestroyDebugUtilsMessengerEXT(instance, debugUtilsMessenger, nullptr);
 	}
+
+#ifdef __linux__
+    XDestroyWindow(display, window);
+    XCloseDisplay(display);
+#endif // __linux__
 
 	return 0;
 }

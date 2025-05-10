@@ -6,6 +6,7 @@
 #include <cassert>
 #include <chrono>
 #include <algorithm>
+#include <cstring>
 
 static_assert(sizeof(void*) == sizeof(uint64_t), "Error: only 64-bit build is supported!");
 
@@ -462,4 +463,15 @@ inline unsigned long firstbitlow(unsigned int value)
 #include <wrl/client.h>
 #endif // _WIN32
 
-#include "dxcapi.h"		// DirectX Shader Compiler library is used for Vulkan and DirectX shader compilation
+// Linux specific things:
+#ifdef __linux__
+#include<X11/Xlib.h>
+#include <dlfcn.h>
+#define GetProcAddress(handle,name) dlsym(handle, name)
+#define ComPtr CComPtr
+#define __RPC_FAR
+#endif // __linux__
+
+// DirectX Shader Compiler library is used for Vulkan and DirectX shader compilation:
+#include "dxcapi.h"
+

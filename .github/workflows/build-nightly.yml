@@ -13,12 +13,12 @@ jobs:
     
     - name: Build
       shell: cmd
-      run: build.bat
+      run: build_windows.bat
       
     - name: Package
       uses: actions/upload-artifact@v4
       with:
-        name: mini_video
+        name: mini_video_windows
         path: |
           mini_video_dx12.exe
           mini_video_vulkan.exe
@@ -27,3 +27,23 @@ jobs:
           yuv_to_rgbCS.hlsl
           test.mp4
 
+          
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Build
+      run: |
+        chmod +x build_linux.sh
+        ./build_linux.sh
+
+    - name: Package
+      uses: actions/upload-artifact@v4
+      with:
+        name: mini_video_linux
+        path: |
+          mini_video_vulkan
+          dxcompiler.so
+          yuv_to_rgbCS.hlsl
+          test.mp4
