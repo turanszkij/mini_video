@@ -19,7 +19,7 @@ How to build:
 - Linux: Run `build_linux.sh` to compile `mini_video_vulkan.cpp`
 
 How to use:
-- run `mini_video_vulkan.exe` (without .exe on Linux) or `mini_video_dx12.exe`, it will play `test.mp4` by default
+- run `mini_video_vulkan.exe` or `mini_video_dx12.exe`, it will play `test.mp4` by default
 - enter the video name as command line argument, for example: `video.mp4`
 
 Features:

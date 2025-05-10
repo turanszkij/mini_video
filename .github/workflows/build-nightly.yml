@@ -43,7 +43,7 @@ jobs:
       with:
         name: mini_video_linux
         path: |
-          mini_video_vulkan
-          dxcompiler.so
+          mini_video_vulkan.exe
+          libdxcompiler.so
           yuv_to_rgbCS.hlsl
           test.mp4
