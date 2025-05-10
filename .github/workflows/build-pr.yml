@@ -32,13 +32,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install dependencies
+    - name: Build
       run: |
         sudo apt update
         sudo apt install libx11-dev
-
-    - name: Build
-      run: g++ -o mini_video_vulkan.exe mini_video_vulkan.cpp -lX11
+        g++ -o mini_video_vulkan.exe mini_video_vulkan.cpp -O3 -lX11
 
     - name: Package
       uses: actions/upload-artifact@v4
