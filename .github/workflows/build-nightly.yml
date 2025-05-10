@@ -39,9 +39,7 @@ jobs:
         sudo apt install libx11-dev
 
     - name: Build
-      run: |
-        chmod +x build_linux.sh
-        ./build_linux.sh
+      run: g++ -o mini_video_vulkan.exe mini_video_vulkan.cpp -lX11
 
     - name: Package
       uses: actions/upload-artifact@v4
