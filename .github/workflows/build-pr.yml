@@ -34,6 +34,7 @@ jobs:
 
     - name: Build
       run: |
+        sudo apt install libx11-dev
         chmod +x build_linux.sh
         ./build_linux.sh
 
