@@ -8,6 +8,9 @@
 #ifdef _DEBUG
 #include <dxgidebug.h>
 #endif // DEBUG
+
+#pragma comment(lib,"d3d12.lib")
+#pragma comment(lib,"dxgi.lib")
 #pragma comment(lib,"dxguid.lib")
 
 int main(int argc, char* argv[])
@@ -34,7 +37,7 @@ int main(int argc, char* argv[])
 
 	// Below this will be all the DirectX 12 code:
 	using namespace Microsoft::WRL;
-	HRESULT hr;
+	HRESULT hr;                                   
 	ComPtr<IDXGIFactory4> dxgiFactory;
 	ComPtr<IDXGIAdapter1> dxgiAdapter;
 	ComPtr<ID3D12Device5> device;
@@ -43,43 +46,18 @@ int main(int argc, char* argv[])
 
 	// Create device:
 	{
-		HMODULE dxgi = LoadLibraryEx(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-		assert(dxgi != nullptr);
-		using PFN_CREATE_DXGI_FACTORY_2 = decltype(&CreateDXGIFactory2);
-		static PFN_CREATE_DXGI_FACTORY_2 CreateDXGIFactory2 = (PFN_CREATE_DXGI_FACTORY_2)GetProcAddress(dxgi, "CreateDXGIFactory2");
-		assert(CreateDXGIFactory2 != nullptr);
 #ifdef _DEBUG
-		using PFN_DXGI_GET_DEBUG_INTERFACE1 = decltype(&DXGIGetDebugInterface1);
-		static PFN_DXGI_GET_DEBUG_INTERFACE1 DXGIGetDebugInterface1 = (PFN_DXGI_GET_DEBUG_INTERFACE1)GetProcAddress(dxgi, "DXGIGetDebugInterface1");
-		assert(DXGIGetDebugInterface1 != nullptr);
-#endif // _DEBUG
-
-		HMODULE dx12 = LoadLibraryEx(L"d3d12.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
-		assert(dx12 != nullptr);
-		static PFN_D3D12_CREATE_DEVICE D3D12CreateDevice = (PFN_D3D12_CREATE_DEVICE)GetProcAddress(dx12, "D3D12CreateDevice");
-		assert(D3D12CreateDevice != nullptr);
-		PFN_D3D12_CREATE_VERSIONED_ROOT_SIGNATURE_DESERIALIZER D3D12CreateVersionedRootSignatureDeserializer = (PFN_D3D12_CREATE_VERSIONED_ROOT_SIGNATURE_DESERIALIZER)GetProcAddress(dx12, "D3D12CreateVersionedRootSignatureDeserializer");
-		assert(D3D12CreateVersionedRootSignatureDeserializer != nullptr);
-
-#ifdef _DEBUG
-		static PFN_D3D12_GET_DEBUG_INTERFACE D3D12GetDebugInterface = (PFN_D3D12_GET_DEBUG_INTERFACE)GetProcAddress(dx12, "D3D12GetDebugInterface");
-		if (D3D12GetDebugInterface)
+		ComPtr<ID3D12Debug> d3dDebug;
+		if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&d3dDebug))))
 		{
-			ComPtr<ID3D12Debug> d3dDebug;
-			if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&d3dDebug))))
-			{
-				d3dDebug->EnableDebugLayer();
-			}
+			d3dDebug->EnableDebugLayer();
 		}
 		ComPtr<IDXGIInfoQueue> dxgiInfoQueue;
-		if (DXGIGetDebugInterface1 != nullptr && SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(dxgiInfoQueue.GetAddressOf()))))
+		if (DXGIGetDebugInterface1 != nullptr && SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiInfoQueue))))
 		{
-			dxgiInfoQueue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, true);
-			dxgiInfoQueue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, true);
+			dxgiInfoQueue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+			dxgiInfoQueue->SetBreakOnSeverity(DXGI_DEBUG_ALL, DXGI_INFO_QUEUE_MESSAGE_SEVERITY_ERROR, TRUE);
 		}
-#endif // _DEBUG
-
-#ifdef _DEBUG
 		hr = CreateDXGIFactory2(DXGI_CREATE_FACTORY_DEBUG, IID_PPV_ARGS(&dxgiFactory));
 #else
 		hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&dxgiFactory));
@@ -94,22 +72,15 @@ int main(int argc, char* argv[])
 				return dxgiFactory6->EnumAdapterByGpuPreference(index, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(ppAdapter));
 			}
 			return dxgiFactory->EnumAdapters1(index, ppAdapter);
-			};
+		};
 		for (uint32_t i = 0; NextAdapter(i, dxgiAdapter.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; ++i)
 		{
 			DXGI_ADAPTER_DESC1 adapterDesc;
 			hr = dxgiAdapter->GetDesc1(&adapterDesc);
-			if (SUCCEEDED(hr))
-			{
-				// Don't select the Basic Render Driver adapter.
-				if (adapterDesc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
-				{
-					continue;
-				}
-			}
+			if (SUCCEEDED(hr) && (adapterDesc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE))
+				continue;
 
 			D3D_FEATURE_LEVEL featurelevels[] = {
-				D3D_FEATURE_LEVEL_12_2,
 				D3D_FEATURE_LEVEL_12_1,
 				D3D_FEATURE_LEVEL_12_0,
 				D3D_FEATURE_LEVEL_11_1,
@@ -118,9 +89,7 @@ int main(int argc, char* argv[])
 			for (auto& featureLevel : featurelevels)
 			{
 				if (SUCCEEDED(D3D12CreateDevice(dxgiAdapter.Get(), featureLevel, IID_PPV_ARGS(&device))))
-				{
 					break;
-				}
 			}
 			if (device != nullptr)
 				break;
@@ -380,8 +349,8 @@ int main(int argc, char* argv[])
 			DxcCreateInstanceProc  DxcCreateInstance = (DxcCreateInstanceProc)GetProcAddress(dxcompiler, "DxcCreateInstance");
 			if (DxcCreateInstance != nullptr)
 			{
-				Microsoft::WRL::ComPtr<IDxcUtils> dxcUtils;
-				Microsoft::WRL::ComPtr<IDxcCompiler3> dxcCompiler;
+				ComPtr<IDxcUtils> dxcUtils;
+				ComPtr<IDxcCompiler3> dxcCompiler;
 
 				hr = DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&dxcUtils));
 				assert(SUCCEEDED(hr));
@@ -423,7 +392,7 @@ int main(int argc, char* argv[])
 					L"yuv_to_rgbCS.hlsl",
 				};
 
-				Microsoft::WRL::ComPtr<IDxcResult> pResults;
+				ComPtr<IDxcResult> pResults;
 				hr = dxcCompiler->Compile(
 					&Source,				// Source buffer.
 					args,					// Array of pointers to arguments.
@@ -433,7 +402,7 @@ int main(int argc, char* argv[])
 				);
 				assert(SUCCEEDED(hr));
 
-				Microsoft::WRL::ComPtr<IDxcBlobUtf8> pErrors = nullptr;
+				ComPtr<IDxcBlobUtf8> pErrors = nullptr;
 				hr = pResults->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&pErrors), nullptr);
 				assert(SUCCEEDED(hr));
 				if (pErrors != nullptr && pErrors->GetStringLength() != 0)
@@ -451,7 +420,7 @@ int main(int argc, char* argv[])
 					return -1;
 				}
 
-				Microsoft::WRL::ComPtr<IDxcBlob> pShader = nullptr;
+				ComPtr<IDxcBlob> pShader = nullptr;
 				hr = pResults->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&pShader), nullptr);
 				assert(SUCCEEDED(hr));
 				if (pShader != nullptr)
@@ -459,12 +428,7 @@ int main(int argc, char* argv[])
 					D3D12_COMPUTE_PIPELINE_STATE_DESC desc = {};
 					desc.CS.pShaderBytecode = pShader->GetBufferPointer();
 					desc.CS.BytecodeLength = pShader->GetBufferSize();
-					hr = device->CreateRootSignature(
-						0,
-						desc.CS.pShaderBytecode,
-						desc.CS.BytecodeLength,
-						IID_PPV_ARGS(&rootsignature)
-					);
+					hr = device->CreateRootSignature(0, desc.CS.pShaderBytecode, desc.CS.BytecodeLength, IID_PPV_ARGS(&rootsignature));
 					assert(SUCCEEDED(hr));
 					hr = device->CreateComputePipelineState(&desc, IID_PPV_ARGS(&compute_pso));
 					assert(SUCCEEDED(hr));
@@ -509,7 +473,6 @@ int main(int argc, char* argv[])
 	}
 
 	// Create window to display video onto:
-#ifdef _WIN32
 	HINSTANCE hInstance = NULL;
 	static bool request_swapchain_resize = false;
 	HWND hWnd = NULL;
@@ -548,7 +511,6 @@ int main(int argc, char* argv[])
 		hWnd = CreateWindowW(L"mini_video_dx12", L"mini_video_dx12", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, video.width, video.height, nullptr, nullptr, NULL, nullptr);
 		ShowWindow(hWnd, SW_SHOWDEFAULT);
 	}
-#endif // _WIN32
 
 	// Create swapchain for the window:
 	ComPtr<IDXGISwapChain3> swapchain;
@@ -641,7 +603,6 @@ int main(int argc, char* argv[])
 	bool exiting = false;
 	while (!exiting)
 	{
-#ifdef _WIN32
 		// Handle window messages like resize, close, etc:
 		MSG msg = { 0 };
 		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -655,7 +616,6 @@ int main(int argc, char* argv[])
 			}
 			continue;
 		}
-#endif // WIN32
 
 		if (video.frameIndex == 0)
 		{
@@ -1079,10 +1039,10 @@ int main(int argc, char* argv[])
 			srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 			srv_desc.Format = DXGI_FORMAT_R8_UNORM;
 			srv_desc.Texture2D.MipLevels = 1;
-			srv_desc.Texture2D.PlaneSlice = 0;
+			srv_desc.Texture2D.PlaneSlice = 0; // luma plane
 			device->CreateShaderResourceView(displayed_image.texture.Get(), &srv_desc, cpu_handle);	// Texture2D<float> input_luminance : register(t0);
 			srv_desc.Format = DXGI_FORMAT_R8G8_UNORM;
-			srv_desc.Texture2D.PlaneSlice = 1;
+			srv_desc.Texture2D.PlaneSlice = 1; // chroma plane
 			cpu_handle.ptr += descriptor_size;
 			device->CreateShaderResourceView(displayed_image.texture.Get(), &srv_desc, cpu_handle); // Texture2D<float2> input_chrominance : register(t1);
 			D3D12_UNORDERED_ACCESS_VIEW_DESC uav_desc = {};
