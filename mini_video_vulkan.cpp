@@ -105,23 +105,18 @@ int main(int argc, char* argv[])
 			debugUtilsCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
 			debugUtilsCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 
-			static auto debugUtilsMessengerCallback = [](
-				VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-				VkDebugUtilsMessageTypeFlagsEXT message_type,
-				const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-				void* user_data) -> VkBool32
+			static auto debugUtilsMessengerCallback = [](VkDebugUtilsMessageSeverityFlagBitsEXT message_severity, VkDebugUtilsMessageTypeFlagsEXT message_type, const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data) -> VkBool32 {
+				if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
 				{
-					if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-					{
-						printf("[Vulkan Warning]: %s\n", callback_data->pMessage);
-					}
-					else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-					{
-						printf("[Vulkan Error]: %s\n", callback_data->pMessage);
-					}
-					assert(0);
-					return VK_FALSE;
-				};
+					printf("[Vulkan Warning]: %s\n", callback_data->pMessage);
+				}
+				else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+				{
+					printf("[Vulkan Error]: %s\n", callback_data->pMessage);
+				}
+				assert(0);
+				return VK_FALSE;
+			};
 			debugUtilsCreateInfo.pfnUserCallback = debugUtilsMessengerCallback;
 			createInfo.pNext = &debugUtilsCreateInfo;
 		}
@@ -924,10 +919,10 @@ int main(int argc, char* argv[])
 	{
 		// Compile the shader with dxcompiler.dll:
 #if defined(_WIN32)
-        using namespace Microsoft::WRL;
+		using namespace Microsoft::WRL;
 		HMODULE dxcompiler = LoadLibrary(L"dxcompiler.dll");
 #elif defined(__linux__)
-        void* dxcompiler = dlopen("dxcompiler.so", RTLD_LAZY);
+		void* dxcompiler = dlopen("dxcompiler.so", RTLD_LAZY);
 #endif // _WIN32
 		if (dxcompiler != nullptr)
 		{
@@ -1141,15 +1136,15 @@ int main(int argc, char* argv[])
 		ShowWindow(hWnd, SW_SHOWDEFAULT);
 	}
 #elif defined(__linux__)
-    Display* display = XOpenDisplay(NULL);
-    if(display == nullptr) printf("XOpenDisplay failed!\n");
-    Window root = DefaultRootWindow(display);
-    if(root == None) printf("DefaultRootWindow failed!\n");
-    Window window = XCreateSimpleWindow(display, root, 0, 0, video.width, video.height, 0, 0, 0xffffffff);
-    if(window == None) printf("XCreateSimpleWindow failed!\n");
-    XMapWindow(display, window);
-    Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
-    XSetWMProtocols(display, window, & wm_delete_window, 1);
+	Display* display = XOpenDisplay(NULL);
+	if(display == nullptr) printf("XOpenDisplay failed!\n");
+	Window root = DefaultRootWindow(display);
+	if(root == None) printf("DefaultRootWindow failed!\n");
+	Window window = XCreateSimpleWindow(display, root, 0, 0, video.width, video.height, 0, 0, 0xffffffff);
+	if(window == None) printf("XCreateSimpleWindow failed!\n");
+	XMapWindow(display, window);
+	Atom wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", False);
+	XSetWMProtocols(display, window, & wm_delete_window, 1);
 #endif // _WIN32
 
 	// Create swap chain for the window to display the video:
@@ -1197,11 +1192,11 @@ int main(int argc, char* argv[])
 		res = vkCreateWin32SurfaceKHR(instance, &surface_info, nullptr, &swapchain_surface);
 		assert(res == VK_SUCCESS);
 #elif defined(__linux__)
-        VkXlibSurfaceCreateInfoKHR surface_info = {};
+		VkXlibSurfaceCreateInfoKHR surface_info = {};
 		surface_info.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
-        surface_info.dpy = display;
-        surface_info.window = window;
-        res = vkCreateXlibSurfaceKHR(instance, &surface_info, nullptr, &swapchain_surface);
+		surface_info.dpy = display;
+		surface_info.window = window;
+		res = vkCreateXlibSurfaceKHR(instance, &surface_info, nullptr, &swapchain_surface);
 		assert(res == VK_SUCCESS);
 #endif // _WIN32
 
@@ -1372,12 +1367,12 @@ int main(int argc, char* argv[])
 			continue;
 		}
 #elif defined(__linux__)
-        XEvent event;
-        XNextEvent(display, &event);
-        if(event.type == ClientMessage) {
-            exiting = event.xclient.data.l[0] == wm_delete_window;
-            continue;
-        }
+		XEvent event;
+		XNextEvent(display, &event);
+		if(event.type == ClientMessage) {
+			exiting = event.xclient.data.l[0] == wm_delete_window;
+			continue;
+		}
 #endif // WIN32
 
 		wait_semaphores.clear();
@@ -1969,8 +1964,8 @@ int main(int argc, char* argv[])
 	}
 
 #ifdef __linux__
-    XDestroyWindow(display, window);
-    XCloseDisplay(display);
+	XDestroyWindow(display, window);
+	XCloseDisplay(display);
 #endif // __linux__
 
 	return 0;
