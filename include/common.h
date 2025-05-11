@@ -51,6 +51,7 @@ struct Video
 		inline void record() { timestamp = std::chrono::high_resolution_clock::now(); }
 		inline float elapsed_seconds() { return std::chrono::duration_cast<std::chrono::duration<float>>(std::chrono::high_resolution_clock::now() - timestamp).count(); }
 	} timer; // the timer is used to time the swapping of displayed pictures
+	int target_display_order = 0; // the next FrameInfo::display_order that must be displayed
 
 	// Decoded Picture Buffer (DPB) state:
 	int poc_status[17] = {}; // tracking the PictureOrderCount for every used DPB slot

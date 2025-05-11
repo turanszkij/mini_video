@@ -1404,9 +1404,16 @@ int main(int argc, char* argv[])
 				reordered_results_free.push_back(used);
 			}
 			reordered_results_working.clear();
+			video.target_display_order = 0;
 		}
 
-		const bool must_decode = reordered_results_working.size() < video.num_dpb_slots;
+		bool must_decode = true;
+		for (auto& x : reordered_results_working)
+		{
+			if (x.display_order == video.target_display_order)
+				must_decode = false;
+		}
+
 		if (must_decode)
 		{
 			// Decoding a new video frame is required:
@@ -1762,32 +1769,34 @@ int main(int argc, char* argv[])
 		video.timer.record();
 		if (video.time_until_next_frame <= 0)
 		{
-			// Search for the next displayable with lowest display order:
-			int min = reordered_results_working[0].display_order;
-			int mini = 0;
-			for (int i = 1; i < (int)reordered_results_working.size(); ++i)
+			// Search for the next displayable:
+			int display_order_changed = -1;
+			for (int i = 0; i < (int)reordered_results_working.size(); ++i)
 			{
-				if (reordered_results_working[i].display_order < min)
+				if (reordered_results_working[i].display_order == video.target_display_order)
 				{
-					min = reordered_results_working[i].display_order;
-					mini = i;
+					display_order_changed = i;
 				}
 			}
-			// Free current output texture:
-			if (displayed_image.image != VK_NULL_HANDLE)
+			if (display_order_changed >= 0)
 			{
-				reordered_results_free.push_back(displayed_image);
+				// Free current output texture:
+				if (displayed_image.image != VK_NULL_HANDLE)
+				{
+					reordered_results_free.push_back(displayed_image);
+				}
+				// Take this used texture as current output:
+				displayed_image = std::move(reordered_results_working[display_order_changed]);
+				// Remove this used texture:
+				std::swap(reordered_results_working[display_order_changed], reordered_results_working.back());
+				reordered_results_working.pop_back();
+
+				video.time_until_next_frame = video.frame_infos[displayed_image.frame_index].duration_seconds;
+
+				assert(displayed_image.image != VK_NULL_HANDLE);
+				printf("\tDisplayed image changed, frame_index: %d, display_order: %d\n", displayed_image.frame_index, displayed_image.display_order);
+				video.target_display_order++;
 			}
-			// Take this used texture as current output:
-			displayed_image = std::move(reordered_results_working[mini]);
-			// Remove this used texture:
-			std::swap(reordered_results_working[mini], reordered_results_working.back());
-			reordered_results_working.pop_back();
-
-			video.time_until_next_frame = video.frame_infos[displayed_image.frame_index].duration_seconds;
-
-			assert(displayed_image.image != VK_NULL_HANDLE);
-			printf("\tDisplayed image changed, frame_index: %d, display_order: %d\n", displayed_image.frame_index, displayed_image.display_order);
 		}
 
 		// Request free swapchain image:
