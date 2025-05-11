@@ -89,7 +89,10 @@ int main(int argc, char* argv[])
 			for (auto& featureLevel : featurelevels)
 			{
 				if (SUCCEEDED(D3D12CreateDevice(dxgiAdapter.Get(), featureLevel, IID_PPV_ARGS(&device))))
+				{
+					wprintf(L"Found a suitable DX12 device: %s\n", adapterDesc.Description);
 					break;
+				}
 			}
 			if (device != nullptr)
 				break;

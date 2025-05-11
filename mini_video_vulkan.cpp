@@ -81,9 +81,14 @@ int main(int argc, char* argv[])
 #endif // _DEBUG
 
 	instanceExtensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-#ifdef _WIN32
+
+#ifdef VK_USE_PLATFORM_WIN32_KHR
 	instanceExtensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-#endif // _WIN32
+#endif // VK_USE_PLATFORM_WIN32_KHR
+
+#ifdef VK_USE_PLATFORM_XLIB_KHR
+	instanceExtensions.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
+#endif // VK_USE_PLATFORM_XLIB_KHR
 
 	VkInstance instance = VK_NULL_HANDLE;
 	VkDebugUtilsMessengerEXT debugUtilsMessenger = VK_NULL_HANDLE;
@@ -113,8 +118,8 @@ int main(int argc, char* argv[])
 				else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
 				{
 					printf("[Vulkan Error]: %s\n", callback_data->pMessage);
+					assert(0);
 				}
-				assert(0);
 				return VK_FALSE;
 			};
 			debugUtilsCreateInfo.pfnUserCallback = debugUtilsMessengerCallback;
@@ -204,6 +209,10 @@ int main(int argc, char* argv[])
 			printf("Failed to find a GPU that supports Vulkan H264 decoding!\n");
 			return -3;
 		}
+
+		VkPhysicalDeviceProperties physical_device_properties = {};
+		vkGetPhysicalDeviceProperties(physicalDevice, &physical_device_properties);
+		printf("Found a suitable Vulkan device: %s\n", physical_device_properties.deviceName);
 
 		decode_h264_profile.sType = VK_STRUCTURE_TYPE_VIDEO_DECODE_H264_PROFILE_INFO_KHR;
 		decode_h264_profile.stdProfileIdc = STD_VIDEO_H264_PROFILE_IDC_HIGH;
@@ -922,8 +931,9 @@ int main(int argc, char* argv[])
 		using namespace Microsoft::WRL;
 		HMODULE dxcompiler = LoadLibrary(L"dxcompiler.dll");
 #elif defined(__linux__)
-		void* dxcompiler = dlopen("dxcompiler.so", RTLD_LAZY);
+		void* dxcompiler = dlopen("./libdxcompiler.so", RTLD_LAZY);
 #endif // _WIN32
+		assert(dxcompiler != nullptr);
 		if (dxcompiler != nullptr)
 		{
 			DxcCreateInstanceProc  DxcCreateInstance = (DxcCreateInstanceProc)GetProcAddress(dxcompiler, "DxcCreateInstance");
@@ -1153,8 +1163,8 @@ int main(int argc, char* argv[])
 	std::vector<VkImage> swapchain_images;
 	std::vector<VkImageView> swapchain_image_views;
 	std::vector<VkSemaphore> swapchain_acquire_semaphores;
+	std::vector<VkSemaphore> swapchain_release_semaphores;
 	uint32_t swapchain_acquire_semaphore_index = 0;
-	VkSemaphore swapchain_release_semaphore = VK_NULL_HANDLE;
 	uint32_t swapchain_image_index = 0;
 	VkExtent2D swapchain_extent = {};
 	auto create_swapchain = [&]() { // because the swapchain will be recreated on window resize, I create a resusable lambda function for it
@@ -1164,8 +1174,11 @@ int main(int argc, char* argv[])
 		if (swapchain != VK_NULL_HANDLE)
 		{
 			vkDestroySwapchainKHR(device, swapchain, nullptr);
-			vkDestroySemaphore(device, swapchain_release_semaphore, nullptr);
 			for (auto& x : swapchain_acquire_semaphores)
+			{
+				vkDestroySemaphore(device, x, nullptr);
+			}
+			for (auto& x : swapchain_release_semaphores)
 			{
 				vkDestroySemaphore(device, x, nullptr);
 			}
@@ -1178,7 +1191,7 @@ int main(int argc, char* argv[])
 		swapchain_images.clear();
 		swapchain_image_views.clear();
 		swapchain_acquire_semaphores.clear();
-		swapchain_release_semaphore = VK_NULL_HANDLE;
+		swapchain_release_semaphores.clear();
 		swapchain_image_index = 0;
 		swapchain_extent = {};
 
@@ -1286,18 +1299,20 @@ int main(int argc, char* argv[])
 			set_name((uint64_t)swapchain_image_views[i], VK_OBJECT_TYPE_IMAGE_VIEW, "swapchain_image_view");
 		}
 
+		swapchain_acquire_semaphores.resize(swapchain_images.size());
+		swapchain_release_semaphores.resize(swapchain_images.size());
+
 		VkSemaphoreCreateInfo semaphore_info = {};
 		semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		res = vkCreateSemaphore(device, &semaphore_info, nullptr, &swapchain_release_semaphore);
-		assert(res == VK_SUCCESS);
-		set_name((uint64_t)swapchain_release_semaphore, VK_OBJECT_TYPE_SEMAPHORE, "swapchain_release_semaphore");
-
-		swapchain_acquire_semaphores.resize(swapchain_images.size());
 		for (size_t i = 0; i < swapchain_image_views.size(); ++i)
 		{
 			res = vkCreateSemaphore(device, &semaphore_info, nullptr, &swapchain_acquire_semaphores[i]);
 			assert(res == VK_SUCCESS);
 			set_name((uint64_t)swapchain_acquire_semaphores[i], VK_OBJECT_TYPE_SEMAPHORE, "swapchain_acquire_semaphores");
+
+			res = vkCreateSemaphore(device, &semaphore_info, nullptr, &swapchain_release_semaphores[i]);
+			assert(res == VK_SUCCESS);
+			set_name((uint64_t)swapchain_release_semaphores[i], VK_OBJECT_TYPE_SEMAPHORE, "swapchain_release_semaphores");
 		}
 
 		printf("swapchain resized, new size: %d x %d\n", (int)swapchain_extent.width, (int)swapchain_extent.height);
@@ -1368,10 +1383,13 @@ int main(int argc, char* argv[])
 		}
 #elif defined(__linux__)
 		XEvent event;
-		XNextEvent(display, &event);
-		if(event.type == ClientMessage) {
-			exiting = event.xclient.data.l[0] == wm_delete_window;
-			continue;
+		if(XPending(display) > 0)
+		{
+			XNextEvent(display, &event);
+			if(event.type == ClientMessage) {
+				exiting = event.xclient.data.l[0] == wm_delete_window;
+				break;
+			}
 		}
 #endif // WIN32
 
@@ -1783,7 +1801,6 @@ int main(int argc, char* argv[])
 				VK_NULL_HANDLE,
 				&swapchain_image_index
 			);
-			assert(res >= VK_SUCCESS);
 			if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
 			{
 				create_swapchain();
@@ -1882,7 +1899,7 @@ int main(int argc, char* argv[])
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitInfo.pCommandBuffers = &graphics_cmd;
 		submitInfo.commandBufferCount = 1;
-		submitInfo.pSignalSemaphores = &swapchain_release_semaphore;
+		submitInfo.pSignalSemaphores = &swapchain_release_semaphores[swapchain_image_index];
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pWaitSemaphores = wait_semaphores.data();
 		submitInfo.waitSemaphoreCount = (uint32_t)wait_semaphores.size();
@@ -1892,13 +1909,12 @@ int main(int argc, char* argv[])
 
 		VkPresentInfoKHR presentInfo = {};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-		presentInfo.pWaitSemaphores = &swapchain_release_semaphore;
+		presentInfo.pWaitSemaphores = &swapchain_release_semaphores[swapchain_image_index];
 		presentInfo.waitSemaphoreCount = 1;
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = &swapchain;
 		presentInfo.pImageIndices = &swapchain_image_index;
 		res = vkQueuePresentKHR(graphicsQueue, &presentInfo);
-		assert(res >= VK_SUCCESS);
 		if (res == VK_SUBOPTIMAL_KHR || res == VK_ERROR_OUT_OF_DATE_KHR)
 		{
 			create_swapchain();
@@ -1951,7 +1967,10 @@ int main(int argc, char* argv[])
 	{
 		vkDestroySemaphore(device, x, nullptr);
 	}
-	vkDestroySemaphore(device, swapchain_release_semaphore, nullptr);
+	for (auto& x : swapchain_release_semaphores)
+	{
+		vkDestroySemaphore(device, x, nullptr);
+	}
 	vkDestroySwapchainKHR(device, swapchain, nullptr);
 	vkDestroyCommandPool(device, video_command_pool, nullptr);
 	vkDestroyCommandPool(device, graphics_command_pool, nullptr);
