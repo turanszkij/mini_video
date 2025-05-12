@@ -1,6 +1,6 @@
 # Mini Video Sample [![Github Build Status](https://github.com/turanszkij/mini_video/workflows/Build/badge.svg)](https://github.com/turanszkij/mini_video/actions)
 
-This sample shows how to use the Vulkan and DirectX 12 graphics API to decode H264 videos without any external dependencies.
+This sample shows how to use the Vulkan, DirectX 12 and DirectX 11 graphics APIs to utilize the video decoder hardware.
 
 A screenshot of this program:
 
@@ -8,25 +8,26 @@ A screenshot of this program:
 
 Why use GPU video decoding:
 
-The focus is to use the fastest path of GPU decoding, without any more CPU usage than absolutely necessary. Because the whole decoding process is entirely handled by Vulkan or DirectX 12 API by using their native resource types, this solution is the most optimal way of decoding a video in games which already use the same type of GPU resources. Applying videos <a href = "https://youtu.be/c1y38w8BZKw?si=O21RdHJtLeHPpBbU">in the game world</a> from decoded resources becomes just as trivial as using any other texture while still using the optimized video compression codecs, there is no need to interface with an other library. Furthermore, you get full access to async compute functionality with the video decoding hardware to get the most out of parallel GPU execution (decoding a video while rendering unrelated things at the same time). Check out <a href = "https://github.com/turanszkij/WickedEngine">Wicked Engine</a> for a full implementation of GPU video decoding in a game engine with fully leveraging async video decoding and using video textures for materials and lights in the 3D world.
+The focus is to use the fastest path of GPU decoding, without any more CPU usage than absolutely necessary. Because the whole decoding process is entirely handled by the graphics API by using their native resource types, this solution is the most optimal way of decoding a video in games which already use the same type of GPU resources. Applying videos <a href = "https://youtu.be/c1y38w8BZKw?si=O21RdHJtLeHPpBbU">in the game world</a> from decoded resources becomes just as trivial as using any other texture while still using the optimized video compression codecs, there is no need to interface with an other library. Furthermore, you get full access to async compute functionality with the video decoding hardware to get the most out of parallel GPU execution (decoding a video while rendering unrelated things at the same time). Check out <a href = "https://github.com/turanszkij/WickedEngine">Wicked Engine</a> for a full implementation of GPU video decoding in a game engine with fully leveraging async video decoding and using video textures for materials and lights in the 3D world.
 
 Platform:
 - Windows (using the Visual Studio compiler)
 - Linux (using the G++ compiler)
 
 How to build:
-- Windows: Run `build_windows.bat` to compile both `mini_video_vulkan.cpp` and `mini_video_dx12.cpp`
-- Linux: Run `build_linux.sh` to compile `mini_video_vulkan.cpp`
+- Windows: Run `build_windows.bat`
+- Linux: Run `build_linux.sh`
 
 How to use:
-- run `mini_video_vulkan.exe` or `mini_video_dx12.exe`, it will play `test.mp4` by default
+- run `mini_video_vulkan.exe`, `mini_video_dx12.exe` or `mini_video_dx11.exe`, it will play `test.mp4` by default
 - enter the video name as command line argument, for example: `video.mp4`
 
 Features:
 - Opening MP4 files which contain H264 data with AVCC layout
 - Opening raw Annex-B style H264 bitstream
-- DirectX 12 API with validation support when built in Debug mode (if `_DEBUG` is defined)
 - Vulkan API with validation support when built in Debug mode (if `_DEBUG` is defined)
+- DirectX 12 API with validation support when built in Debug mode (if `_DEBUG` is defined)
+- DirectX 11 API with validation support when built in Debug mode (if `_DEBUG` is defined)
 
 Limitations:
 - Only H264 compression is supported currently
@@ -46,8 +47,9 @@ Structure of the program:
 - `include/common.h` contains the logical `Video` description structure and some other helpers
 - `mini_video_vulkan.cpp` contains the Vulkan code and the `main()` function
 - `mini_video_dx12.cpp` contains the DX12 code and the `main()` function
+- `mini_video_dx11.cpp` contains the DX11 code and the `main()` function
 - `yuv_to_rgbCS.hlsl` is a compute shader that converts the video from YUV to RGB and outputs to screen
-- The `main()` function does roughly the same things in both cases, just expressed with a different APIs:
+- The `main()` function does roughly the same things in all cases, just expressed with a different APIs:
   - Create the device object which interfaces with the GPU
   - Creates the video decoder object and memory allocation for it
   - Creates GPU buffer and copies the whole H264 bitstream into it
