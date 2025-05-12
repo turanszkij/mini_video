@@ -106,9 +106,15 @@ int main(int argc, char* argv[])
 		hr = dxgiDevice->SetMaximumFrameLatency(1);
 		assert(SUCCEEDED(hr));
 
-		ComPtr<IDXGIAdapter> dxgiAdapter;
+		ComPtr<IDXGIAdapter1> dxgiAdapter;
 		hr = dxgiDevice->GetParent(IID_PPV_ARGS(&dxgiAdapter));
 		assert(SUCCEEDED(hr));
+
+		DXGI_ADAPTER_DESC1 adapterDesc;
+		if (SUCCEEDED(dxgiAdapter->GetDesc1(&adapterDesc)))
+		{
+			wprintf(L"Found a suitable DX11 device: %s\n", adapterDesc.Description);
+		}
 
 		hr = dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
 		assert(SUCCEEDED(hr));
@@ -147,7 +153,8 @@ int main(int argc, char* argv[])
 			if (
 				decoder_config.guidConfigBitstreamEncryption == DXVA_NoEncrypt &&
 				decoder_config.guidConfigMBcontrolEncryption == DXVA_NoEncrypt &&
-				decoder_config.guidConfigResidDiffEncryption == DXVA_NoEncrypt
+				decoder_config.guidConfigResidDiffEncryption == DXVA_NoEncrypt &&
+				decoder_config.ConfigBitstreamRaw == 2 // this fixes Nvidia black screen
 				)
 			{
 				break;
