@@ -20,6 +20,7 @@ jobs:
       with:
         name: mini_video_windows
         path: |
+          mini_video_dx11.exe
           mini_video_dx12.exe
           mini_video_vulkan.exe
           dxcompiler.dll
