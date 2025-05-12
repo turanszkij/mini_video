@@ -15,8 +15,8 @@ Platform:
 - Linux (using the G++ compiler)
 
 How to build:
-- Windows: Run `build_windows.bat` to compile `mini_video_vulkan.cpp`, `mini_video_dx12.cpp` and `mini_video_dx11.cpp`
-- Linux: Run `build_linux.sh` to compile `mini_video_vulkan.cpp`
+- Windows: Run `build_windows.bat`
+- Linux: Run `build_linux.sh`
 
 How to use:
 - run `mini_video_vulkan.exe`, `mini_video_dx12.exe` or `mini_video_dx11.exe`, it will play `test.mp4` by default
