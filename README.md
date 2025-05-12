@@ -1,6 +1,6 @@
 # Mini Video Sample [![Github Build Status](https://github.com/turanszkij/mini_video/workflows/Build/badge.svg)](https://github.com/turanszkij/mini_video/actions)
 
-This sample shows how to use the Vulkan, DirectX 12 and DirectX 11 graphics APIs to utilize the hardware video decoder.
+This sample shows how to use the Vulkan, DirectX 12 and DirectX 11 graphics APIs to utilize the video decoder hardware.
 
 A screenshot of this program:
 
