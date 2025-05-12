@@ -22,10 +22,11 @@ jobs:
           mini_video_dx11.exe
           mini_video_dx12.exe
           mini_video_vulkan.exe
-          dxcompiler.dll
-          dxil.dll
           yuv_to_rgbCS.hlsl
           test.mp4
+          dxcompiler.dll
+          dxil.dll
+          d3dcompiler_47.dll
 
           
   linux:
