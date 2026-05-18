@@ -616,6 +616,13 @@ namespace h264 {
 				}
 			}
 		}
+		else
+		{
+			// H.264 spec 7.4.2.1.1: when chroma_format_idc is not present
+			// (i.e. Baseline/Main/Extended profile) it shall be inferred
+			// to be equal to 1 (4:2:0 chroma format).
+			sps->chroma_format_idc = 1;
+		}
 		sps->log2_max_frame_num_minus4 = b->ue();
 		sps->pic_order_cnt_type = b->ue();
 		if (sps->pic_order_cnt_type == 0)
@@ -803,12 +810,13 @@ namespace h264 {
 	}
 	constexpr void read_pred_weight_table(SliceHeader* sh, const SPS* sps, const PPS* pps, Bitstream* b)
 	{
+		(void)pps;
 		sh->pwt.luma_log2_weight_denom = b->ue();
 		if (sps->chroma_format_idc != 0)
 		{
 			sh->pwt.chroma_log2_weight_denom = b->ue();
 		}
-		for (int i = 0; i <= pps->num_ref_idx_l0_active_minus1; i++)
+		for (int i = 0; i <= sh->num_ref_idx_l0_active_minus1; i++)
 		{
 			sh->pwt.luma_weight_l0_flag[i] = b->u1();
 			if (sh->pwt.luma_weight_l0_flag[i])
@@ -831,7 +839,7 @@ namespace h264 {
 		}
 		if (is_slice_type(sh->slice_type, SH_SLICE_TYPE_B))
 		{
-			for (int i = 0; i <= pps->num_ref_idx_l1_active_minus1; i++)
+			for (int i = 0; i <= sh->num_ref_idx_l1_active_minus1; i++)
 			{
 				sh->pwt.luma_weight_l1_flag[i] = b->u1();
 				if (sh->pwt.luma_weight_l1_flag[i])
@@ -941,6 +949,11 @@ namespace h264 {
 		}
 		if (is_slice_type(sh->slice_type, SH_SLICE_TYPE_P) || is_slice_type(sh->slice_type, SH_SLICE_TYPE_SP) || is_slice_type(sh->slice_type, SH_SLICE_TYPE_B))
 		{
+			// H.264 spec 7.4.3: when num_ref_idx_active_override_flag is
+			// zero, the slice's effective num_ref_idx_l[01]_active_minus1
+			// defaults to the PPS num_ref_idx_l[01]_default_active_minus1.
+			sh->num_ref_idx_l0_active_minus1 = pps->num_ref_idx_l0_active_minus1;
+			sh->num_ref_idx_l1_active_minus1 = pps->num_ref_idx_l1_active_minus1;
 			sh->num_ref_idx_active_override_flag = b->u1();
 			if (sh->num_ref_idx_active_override_flag)
 			{
