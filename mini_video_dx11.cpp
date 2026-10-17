@@ -164,6 +164,36 @@ int main(int argc, char* argv[])
 		assert(SUCCEEDED(hr));
 	}
 
+	// Decode into a stable surface per DPB slot. Display textures are recycled after presentation,
+	// which is sooner than a reference leaves the DPB, so they cannot also be the reference surfaces.
+	struct DpbPicture
+	{
+		ComPtr<ID3D11Texture2D> texture;
+		ComPtr<ID3D11VideoDecoderOutputView> view;
+	};
+	std::vector<DpbPicture> dpb_pictures(video.num_dpb_slots);
+	for (uint32_t i = 0; i < video.num_dpb_slots; ++i)
+	{
+		D3D11_TEXTURE2D_DESC texture_desc = {};
+		texture_desc.Format = decoder_format;
+		texture_desc.Width = video.padded_width;
+		texture_desc.Height = video.padded_height;
+		texture_desc.ArraySize = 1;
+		texture_desc.SampleDesc.Count = 1;
+		texture_desc.MipLevels = 1;
+		texture_desc.Usage = D3D11_USAGE_DEFAULT;
+		texture_desc.BindFlags = D3D11_BIND_DECODER;
+		hr = device->CreateTexture2D(&texture_desc, nullptr, &dpb_pictures[i].texture);
+		assert(SUCCEEDED(hr));
+
+		D3D11_VIDEO_DECODER_OUTPUT_VIEW_DESC view_desc = {};
+		view_desc.DecodeProfile = D3D11_DECODER_PROFILE_H264_VLD_NOFGT;
+		view_desc.ViewDimension = D3D11_VDOV_DIMENSION_TEXTURE2D;
+		view_desc.Texture2D.ArraySlice = 0;
+		hr = video_device->CreateVideoDecoderOutputView(dpb_pictures[i].texture.Get(), &view_desc, &dpb_pictures[i].view);
+		assert(SUCCEEDED(hr));
+	}
+
 	// Create shader:
 	ComPtr<ID3D11ComputeShader> compute_shader;
 	{
@@ -431,15 +461,7 @@ int main(int argc, char* argv[])
 			const h264::PPS& pps = video.pps_array[slice_header.pic_parameter_set_id];
 			const h264::SPS& sps = video.sps_array[pps.seq_parameter_set_id];
 
-			if (frame_info.is_intra)
-			{
-				video.reference_usage.clear();
-				video.next_ref = 0;
-				video.next_slot = 0;
-			}
-			video.current_slot = video.next_slot;
-			video.poc_status[video.current_slot] = frame_info.poc;
-			video.framenum_status[video.current_slot] = slice_header.frame_num;
+			video.BeginDecodePicture(video.frameIndex);
 
 			DXVA_PicParams_H264 pic_params_h264 = {};
 			DXVA_Qmatrix_H264 qmatrix_h264 = {};
@@ -479,7 +501,7 @@ int main(int argc, char* argv[])
 				pic_params_h264.FieldOrderCntList[i][1] = 0;
 				pic_params_h264.FrameNumList[i] = 0;
 			}
-			for (size_t i = 0; i < video.reference_usage.size(); ++i)
+			for (size_t i = 0; i < video.reference_usage.size() && i < 16; ++i)
 			{
 				uint32_t ref_slot = video.reference_usage[i];
 				assert(ref_slot != video.current_slot);
@@ -524,8 +546,11 @@ int main(int argc, char* argv[])
 			pic_params_h264.StatusReportFeedbackNumber = (UINT)video.frameIndex + 1; // shall not be 0
 			assert(pic_params_h264.StatusReportFeedbackNumber > 0);
 			pic_params_h264.ContinuationFlag = 1;
-			pic_params_h264.num_ref_idx_l0_active_minus1 = pps.num_ref_idx_l0_active_minus1;
-			pic_params_h264.num_ref_idx_l1_active_minus1 = pps.num_ref_idx_l1_active_minus1;
+			int ref_idx_l0 = 0;
+			int ref_idx_l1 = 0;
+			Video::RefIdxActive(slice_header, pps, ref_idx_l0, ref_idx_l1);
+			pic_params_h264.num_ref_idx_l0_active_minus1 = ref_idx_l0;
+			pic_params_h264.num_ref_idx_l1_active_minus1 = ref_idx_l1;
 
 			// DirectX Video Acceleration for H.264/MPEG-4 AVC Decoding, Microsoft, Updated 2010, Page 29
 			//	Also: https://gitlab.freedesktop.org/mesa/mesa/-/blob/main/src/gallium/drivers/d3d12/d3d12_video_dec_h264.cpp#L548
@@ -592,7 +617,7 @@ int main(int argc, char* argv[])
 			// Current latest reordered is pushed to the reorder working queue:
 			reordered_results_working.push_back(reordered_current);
 
-			hr = video_context->DecoderBeginFrame(decoder.Get(), reordered_current.decoder_view.Get(), 0, nullptr);
+			hr = video_context->DecoderBeginFrame(decoder.Get(), dpb_pictures[video.current_slot].view.Get(), 0, nullptr);
 			assert(SUCCEEDED(hr));
 
 			UINT buffer_size = 0;
@@ -645,21 +670,11 @@ int main(int argc, char* argv[])
 			hr = video_context->DecoderEndFrame(decoder.Get());
 			assert(SUCCEEDED(hr));
 
+			immediate_context->CopyResource(reordered_current.texture.Get(), dpb_pictures[video.current_slot].texture.Get());
+
 			printf("Decoded frame_index = %d, display_order: %d\n", video.frameIndex, frame_info.display_order);
 
-			// DPB slot management:
-			//	When current frame was a reference, then the next frame can not overwrite its DPB slot, so increment next_slot as a ring buffer
-			//	However, the ring buffer will wrap around so older reference frames can be overwritten by this
-			if (frame_info.reference_priority > 0)
-			{
-				if (video.next_ref >= video.reference_usage.size())
-				{
-					video.reference_usage.resize(video.next_ref + 1);
-				}
-				video.reference_usage[video.next_ref] = video.current_slot;
-				video.next_ref = (video.next_ref + 1) % (video.num_dpb_slots - 1);
-				video.next_slot = (video.next_slot + 1) % video.num_dpb_slots;
-			}
+			video.EndDecodePicture(video.frameIndex);
 			video.frameIndex = (video.frameIndex + 1) % video.frame_infos.size();
 		}
 

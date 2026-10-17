@@ -647,15 +647,7 @@ int main(int argc, char* argv[])
 			const h264::PPS& pps = video.pps_array[slice_header.pic_parameter_set_id];
 			const h264::SPS& sps = video.sps_array[pps.seq_parameter_set_id];
 
-			if (frame_info.is_intra)
-			{
-				video.reference_usage.clear();
-				video.next_ref = 0;
-				video.next_slot = 0;
-			}
-			video.current_slot = video.next_slot;
-			video.poc_status[video.current_slot] = frame_info.poc;
-			video.framenum_status[video.current_slot] = slice_header.frame_num;
+			video.BeginDecodePicture(video.frameIndex);
 
 			hr = video_command_allocator->Reset();
 			assert(SUCCEEDED(hr));
@@ -705,14 +697,15 @@ int main(int argc, char* argv[])
 				output.OutputSubresource = video.current_slot;
 			}
 
-			ID3D12Resource* reference_frames[16] = {};
-			UINT reference_subresources[16] = {};
+			ID3D12Resource* reference_frames[17] = {};
+			UINT reference_subresources[17] = {};
+			assert(video.num_dpb_slots <= arraysize(reference_frames));
 			for (size_t i = 0; i < video.num_dpb_slots; ++i)
 			{
 				reference_frames[i] = dpb_texture.Get();
 				reference_subresources[i] = (UINT)i;
 			}
-			input.ReferenceFrames.NumTexture2Ds = arraysize(reference_frames);
+			input.ReferenceFrames.NumTexture2Ds = video.num_dpb_slots;
 			input.ReferenceFrames.ppTexture2Ds = reference_frames;
 			input.ReferenceFrames.pSubresources = reference_subresources;
 
@@ -759,7 +752,7 @@ int main(int argc, char* argv[])
 				pic_params_h264.FieldOrderCntList[i][1] = 0;
 				pic_params_h264.FrameNumList[i] = 0;
 			}
-			for (size_t i = 0; i < video.reference_usage.size(); ++i)
+			for (size_t i = 0; i < video.reference_usage.size() && i < 16; ++i)
 			{
 				uint32_t ref_slot = video.reference_usage[i];
 				assert(ref_slot != video.current_slot);
@@ -804,8 +797,11 @@ int main(int argc, char* argv[])
 			pic_params_h264.StatusReportFeedbackNumber = (UINT)video.frameIndex + 1; // shall not be 0
 			assert(pic_params_h264.StatusReportFeedbackNumber > 0);
 			pic_params_h264.ContinuationFlag = 1;
-			pic_params_h264.num_ref_idx_l0_active_minus1 = pps.num_ref_idx_l0_active_minus1;
-			pic_params_h264.num_ref_idx_l1_active_minus1 = pps.num_ref_idx_l1_active_minus1;
+			int ref_idx_l0 = 0;
+			int ref_idx_l1 = 0;
+			Video::RefIdxActive(slice_header, pps, ref_idx_l0, ref_idx_l1);
+			pic_params_h264.num_ref_idx_l0_active_minus1 = ref_idx_l0;
+			pic_params_h264.num_ref_idx_l1_active_minus1 = ref_idx_l1;
 			input.FrameArguments[input.NumFrameArguments].Type = D3D12_VIDEO_DECODE_ARGUMENT_TYPE_PICTURE_PARAMETERS;
 			input.FrameArguments[input.NumFrameArguments].Size = sizeof(pic_params_h264);
 			input.FrameArguments[input.NumFrameArguments].pData = &pic_params_h264;
@@ -903,19 +899,7 @@ int main(int argc, char* argv[])
 			
 			printf("Decoded frame_index = %d, display_order: %d\n", video.frameIndex, frame_info.display_order);
 
-			// DPB slot management:
-			//	When current frame was a reference, then the next frame can not overwrite its DPB slot, so increment next_slot as a ring buffer
-			//	However, the ring buffer will wrap around so older reference frames can be overwritten by this
-			if (frame_info.reference_priority > 0)
-			{
-				if (video.next_ref >= video.reference_usage.size())
-				{
-					video.reference_usage.resize(video.next_ref + 1);
-				}
-				video.reference_usage[video.next_ref] = video.current_slot;
-				video.next_ref = (video.next_ref + 1) % (video.num_dpb_slots - 1);
-				video.next_slot = (video.next_slot + 1) % video.num_dpb_slots;
-			}
+			video.EndDecodePicture(video.frameIndex);
 		}
 
 		hr = graphics_command_allocator->Reset();

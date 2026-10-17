@@ -1422,15 +1422,7 @@ int main(int argc, char* argv[])
 			const h264::PPS& pps = video.pps_array[slice_header.pic_parameter_set_id];
 			const h264::SPS& sps = video.sps_array[pps.seq_parameter_set_id];
 
-			if (frame_info.is_intra)
-			{
-				video.reference_usage.clear();
-				video.next_ref = 0;
-				video.next_slot = 0;
-			}
-			video.current_slot = video.next_slot;
-			video.poc_status[video.current_slot] = frame_info.poc;
-			video.framenum_status[video.current_slot] = slice_header.frame_num;
+			video.BeginDecodePicture(video.frameIndex);
 
 			res = vkResetCommandPool(device, video_command_pool, 0);
 			assert(res == VK_SUCCESS);
@@ -1509,7 +1501,7 @@ int main(int argc, char* argv[])
 			std_picture_info_h264.idr_pic_id = slice_header.idr_pic_id;
 			std_picture_info_h264.flags.is_intra = frame_info.is_intra ? 1 : 0;
 			std_picture_info_h264.flags.is_reference = frame_info.reference_priority > 0 ? 1 : 0;
-			std_picture_info_h264.flags.IdrPicFlag = (std_picture_info_h264.flags.is_intra && std_picture_info_h264.flags.is_reference) ? 1 : 0;
+			std_picture_info_h264.flags.IdrPicFlag = frame_info.is_intra ? 1 : 0;
 			std_picture_info_h264.flags.field_pic_flag = slice_header.field_pic_flag;
 			std_picture_info_h264.flags.bottom_field_flag = slice_header.bottom_field_flag;
 			std_picture_info_h264.flags.complementary_field_pair = 0;
@@ -1544,7 +1536,7 @@ int main(int argc, char* argv[])
 				ref.flags.top_field_flag = 0;
 				ref.flags.is_non_existing = 0;
 				ref.flags.used_for_long_term_reference = 0;
-				ref.FrameNum = video.framenum_status[i];
+				ref.FrameNum = (uint16_t)video.framenum_status[i];
 				ref.PicOrderCnt[0] = video.poc_status[i];
 				ref.PicOrderCnt[1] = video.poc_status[i];
 			}
@@ -1597,6 +1589,7 @@ int main(int argc, char* argv[])
 			decode_info.pReferenceSlots = decode_info.referenceSlotCount == 0 ? nullptr : reference_slots;
 			decode_info.pSetupReferenceSlot = &reference_slot_infos[video.current_slot];
 
+			// Offsets are relative to srcBufferOffset, which is the start of this frame.
 			uint32_t slice_offset = 0;
 
 			// https://vulkan.lunarg.com/doc/view/1.3.239.0/windows/1.3-extensions/vkspec.html#_h_264_decoding_parameters
@@ -1671,19 +1664,7 @@ int main(int argc, char* argv[])
 			wait_semaphores.push_back(video_semaphore);
 			printf("Decoded frame_index = %d, display_order: %d\n", video.frameIndex, frame_info.display_order);
 
-			// DPB slot management:
-			//	When current frame was a reference, then the next frame can not overwrite its DPB slot, so increment next_slot as a ring buffer
-			//	However, the ring buffer will wrap around so older reference frames can be overwritten by this
-			if (frame_info.reference_priority > 0)
-			{
-				if (video.next_ref >= video.reference_usage.size())
-				{
-					video.reference_usage.resize(video.next_ref + 1);
-				}
-				video.reference_usage[video.next_ref] = video.current_slot;
-				video.next_ref = (video.next_ref + 1) % (video.num_dpb_slots - 1);
-				video.next_slot = (video.next_slot + 1) % video.num_dpb_slots;
-			}
+			video.EndDecodePicture(video.frameIndex);
 		}
 
 		// Resolve latest video frame to RGB onto the swapchain with a compute shader every frame, even if decoding didn't happen, the presentation loop is running independently of video decoder frame rate:
