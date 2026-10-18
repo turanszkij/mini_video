@@ -53,12 +53,19 @@ struct Video
 	} timer; // the timer is used to time the swapping of displayed pictures
 	int target_display_order = 0; // the next FrameInfo::display_order that must be displayed
 
-	// Decoded Picture Buffer (DPB) state:
-	int poc_status[17] = {}; // tracking the PictureOrderCount for every used DPB slot
-	int framenum_status[17] = {}; // tracking the frame index for every used DPB slot
-	std::vector<uint8_t> reference_usage; // tracking the state of reference frames
-	uint8_t next_ref = 0;
-	uint8_t next_slot = 0;
+	// Decoded Picture Buffer (DPB) state.
+	// reference_usage / *_status describe the references used to decode the current picture (before marking).
+	// dpb[] is the marked reference set left behind for the next picture.
+	struct DpbEntry
+	{
+		bool used = false;
+		int frame_num = 0;
+		int poc = 0;
+	};
+	DpbEntry dpb[17] = {};
+	int poc_status[17] = {};
+	int framenum_status[17] = {};
+	std::vector<uint8_t> reference_usage;
 	uint8_t current_slot = 0;
 
 	// File loading helpers:
@@ -94,7 +101,10 @@ struct Video
 		auto read_callback = [](int64_t offset, void* buffer, size_t size, void* token) -> int
 			{
 				INPUT_BUFFER* buf = (INPUT_BUFFER*)token;
-				size_t to_copy = MINIMP4_MIN(size, buf->size - offset - size);
+				if (offset < 0 || (uint64_t)offset >= buf->size)
+					return 1;
+				size_t available = buf->size - (size_t)offset;
+				size_t to_copy = MINIMP4_MIN(size, available);
 				std::memcpy(buffer, buf->buffer + offset, to_copy);
 				return to_copy != size;
 			};
@@ -190,7 +200,7 @@ struct Video
 					assert(frame_bytes >= size);
 
 					h264::Bitstream bs = {};
-					bs.init(&src_buffer[4], frame_bytes);
+					bs.init(&src_buffer[4], size - 4);
 					h264::NALHeader nal = {};
 					h264::read_nal_header(&nal, &bs);
 
@@ -358,68 +368,213 @@ struct Video
 		return true;
 	}
 
-	// Calculate the frame reordering based on the H264 info:
+	static void RefIdxActive(const h264::SliceHeader& sh, const h264::PPS& pps, int& l0, int& l1)
+	{
+		l0 = pps.num_ref_idx_l0_active_minus1;
+		l1 = pps.num_ref_idx_l1_active_minus1;
+		if (sh.num_ref_idx_active_override_flag)
+		{
+			l0 = sh.num_ref_idx_l0_active_minus1;
+			if (h264::is_slice_type(sh.slice_type, h264::SH_SLICE_TYPE_B))
+				l1 = sh.num_ref_idx_l1_active_minus1;
+		}
+	}
+
 	void CalculateFrameDisplayOrder()
 	{
-		int prev_pic_order_cnt_lsb = 0;
-		int prev_pic_order_cnt_msb = 0;
-		int poc_cycle = 0;
+		int prev_poc_msb = 0;
+		int prev_poc_lsb = 0;
+		int gop = -1;
 		for (size_t i = 0; i < frame_infos.size(); ++i)
 		{
-			const h264::SliceHeader& slice_header = slice_headers[i];
-			const h264::PPS& pps = pps_array[slice_header.pic_parameter_set_id];
+			const h264::SliceHeader& sh = slice_headers[i];
+			const h264::PPS& pps = pps_array[sh.pic_parameter_set_id];
 			const h264::SPS& sps = sps_array[pps.seq_parameter_set_id];
+			const bool idr = frame_infos[i].is_intra;
+			const bool is_ref = frame_infos[i].reference_priority != 0;
+			const int max_poc_lsb = 1 << (sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
 
-			// Rec. ITU-T H.264 (08/2021) page 77
-			int max_pic_order_cnt_lsb = 1 << (sps.log2_max_pic_order_cnt_lsb_minus4 + 4);
-			int pic_order_cnt_lsb = slice_header.pic_order_cnt_lsb;
-
-			if (pic_order_cnt_lsb == 0)
+			if (idr)
 			{
-				poc_cycle++;
+				prev_poc_msb = 0;
+				prev_poc_lsb = 0;
+				gop++;
 			}
 
-			// Rec. ITU-T H.264 (08/2021) page 115
-			// Also: https://www.ramugedia.com/negative-pocs
-			int pic_order_cnt_msb = 0;
-			if (pic_order_cnt_lsb < prev_pic_order_cnt_lsb && (prev_pic_order_cnt_lsb - pic_order_cnt_lsb) >= max_pic_order_cnt_lsb / 2)
-			{
-				pic_order_cnt_msb = prev_pic_order_cnt_msb + max_pic_order_cnt_lsb; // pic_order_cnt_lsb wrapped around
-			}
-			else if (pic_order_cnt_lsb > prev_pic_order_cnt_lsb && (pic_order_cnt_lsb - prev_pic_order_cnt_lsb) > max_pic_order_cnt_lsb / 2)
-			{
-				pic_order_cnt_msb = prev_pic_order_cnt_msb - max_pic_order_cnt_lsb; // here negative POC might occur
-			}
+			int poc_msb = 0;
+			const int poc_lsb = sh.pic_order_cnt_lsb;
+			if (poc_lsb < prev_poc_lsb && (prev_poc_lsb - poc_lsb) >= max_poc_lsb / 2)
+				poc_msb = prev_poc_msb + max_poc_lsb;
+			else if (poc_lsb > prev_poc_lsb && (poc_lsb - prev_poc_lsb) > max_poc_lsb / 2)
+				poc_msb = prev_poc_msb - max_poc_lsb;
 			else
-			{
-				pic_order_cnt_msb = prev_pic_order_cnt_msb;
-			}
-			//pic_order_cnt_msb = pic_order_cnt_msb % 256;
-			prev_pic_order_cnt_lsb = pic_order_cnt_lsb;
-			prev_pic_order_cnt_msb = pic_order_cnt_msb;
+				poc_msb = prev_poc_msb;
 
-			// https://www.vcodex.com/h264avc-picture-management/
-			frame_infos[i].poc = pic_order_cnt_msb + pic_order_cnt_lsb; // poc = TopFieldOrderCount
-			frame_infos[i].gop = poc_cycle - 1;
+			frame_infos[i].poc = poc_msb + poc_lsb;
+			frame_infos[i].gop = gop;
+
+			if (is_ref)
+			{
+				prev_poc_msb = poc_msb;
+				prev_poc_lsb = poc_lsb;
+			}
 		}
 
 		std::vector<size_t> frame_display_order(frame_infos.size());
 		for (size_t i = 0; i < frame_infos.size(); ++i)
-		{
 			frame_display_order[i] = i;
-		}
-		std::sort(frame_display_order.begin(), frame_display_order.end(), [&](size_t a, size_t b) {
-			const Video::FrameInfo& frameA = frame_infos[a];
-			const Video::FrameInfo& frameB = frame_infos[b];
-			int64_t prioA = (int64_t(frameA.gop) << 32ll) | int64_t(frameA.poc);
-			int64_t prioB = (int64_t(frameB.gop) << 32ll) | int64_t(frameB.poc);
-			return prioA < prioB;
-			});
+		std::stable_sort(frame_display_order.begin(), frame_display_order.end(), [&](size_t a, size_t b) {
+			const FrameInfo& frameA = frame_infos[a];
+			const FrameInfo& frameB = frame_infos[b];
+			if (frameA.gop != frameB.gop)
+				return frameA.gop < frameB.gop;
+			if (frameA.poc != frameB.poc)
+				return frameA.poc < frameB.poc;
+			return a < b;
+		});
 		for (size_t i = 0; i < frame_display_order.size(); ++i)
-		{
 			frame_infos[frame_display_order[i]].display_order = (int)i;
-		}
 	}
+
+	static int PicNum(int frame_num, int curr, int max_frame_num)
+	{
+		return frame_num > curr ? frame_num - max_frame_num : frame_num;
+	}
+
+	int CountUsed() const
+	{
+		int count = 0;
+		for (uint32_t i = 0; i < num_dpb_slots; ++i)
+		{
+			if (dpb[i].used)
+				count++;
+		}
+		return count;
+	}
+
+	void ClearDpb()
+	{
+		for (DpbEntry& entry : dpb)
+			entry = {};
+		reference_usage.clear();
+	}
+
+	void BeginDecodePicture(int frame_index)
+	{
+		const FrameInfo& info = frame_infos[frame_index];
+		const h264::SliceHeader& sh = slice_headers[frame_index];
+		const h264::PPS& pps = pps_array[sh.pic_parameter_set_id];
+		const h264::SPS& sps = sps_array[pps.seq_parameter_set_id];
+
+		if (frame_index == 0 || info.is_intra)
+			ClearDpb();
+
+		int slot = -1;
+		for (uint32_t i = 0; i < num_dpb_slots; ++i)
+		{
+			if (!dpb[i].used)
+			{
+				slot = (int)i;
+				break;
+			}
+		}
+		assert(slot >= 0);
+		current_slot = (uint8_t)slot;
+
+		for (uint32_t i = 0; i < 17; ++i)
+		{
+			poc_status[i] = 0;
+			framenum_status[i] = 0;
+		}
+		poc_status[current_slot] = info.poc;
+		framenum_status[current_slot] = sh.frame_num;
+
+		const int max_frame_num = 1 << (sps.log2_max_frame_num_minus4 + 4);
+		const int curr = sh.frame_num;
+		reference_usage.clear();
+		for (uint32_t i = 0; i < num_dpb_slots; ++i)
+		{
+			if (!dpb[i].used)
+				continue;
+			reference_usage.push_back((uint8_t)i);
+			poc_status[i] = dpb[i].poc;
+			framenum_status[i] = dpb[i].frame_num;
+		}
+		std::sort(reference_usage.begin(), reference_usage.end(), [&](uint8_t a, uint8_t b) {
+			return PicNum(dpb[a].frame_num, curr, max_frame_num) > PicNum(dpb[b].frame_num, curr, max_frame_num);
+		});
+		assert(reference_usage.size() <= 16);
+		assert(reference_usage.size() <= (size_t)std::max(sps.num_ref_frames, 1));
+		for (uint8_t ref_slot : reference_usage)
+			assert(ref_slot != current_slot);
+	}
+
+	void EndDecodePicture(int frame_index)
+	{
+		const FrameInfo& info = frame_infos[frame_index];
+		const h264::SliceHeader& sh = slice_headers[frame_index];
+		const h264::PPS& pps = pps_array[sh.pic_parameter_set_id];
+		const h264::SPS& sps = sps_array[pps.seq_parameter_set_id];
+		const int max_frame_num = 1 << (sps.log2_max_frame_num_minus4 + 4);
+		const int curr = sh.frame_num;
+		const int ref_limit = std::max(sps.num_ref_frames, 1);
+		const bool idr = info.is_intra;
+
+		if (info.reference_priority == 0)
+		{
+			assert(!dpb[current_slot].used);
+			return;
+		}
+
+		if (!idr && sh.drpm.adaptive_ref_pic_marking_mode_flag)
+		{
+			for (int n = 0; n < 64; ++n)
+			{
+				const int op = sh.drpm.memory_management_control_operation[n];
+				if (op == 0)
+					break;
+				if (op != 1)
+					continue;
+				const int pic_num = curr - (sh.drpm.difference_of_pic_nums_minus1[n] + 1);
+				for (uint32_t i = 0; i < num_dpb_slots; ++i)
+				{
+					if (dpb[i].used && PicNum(dpb[i].frame_num, curr, max_frame_num) == pic_num)
+					{
+						dpb[i] = {};
+						break;
+					}
+				}
+			}
+		}
+		else if (!idr)
+		{
+			while (CountUsed() >= ref_limit)
+			{
+				int oldest = -1;
+				int oldest_pic = 0;
+				for (uint32_t i = 0; i < num_dpb_slots; ++i)
+				{
+					if (!dpb[i].used)
+						continue;
+					const int pic_num = PicNum(dpb[i].frame_num, curr, max_frame_num);
+					if (oldest < 0 || pic_num < oldest_pic)
+					{
+						oldest = (int)i;
+						oldest_pic = pic_num;
+					}
+				}
+				if (oldest < 0)
+					break;
+				dpb[oldest] = {};
+			}
+		}
+
+		dpb[current_slot].used = true;
+		dpb[current_slot].frame_num = sh.frame_num;
+		dpb[current_slot].poc = info.poc;
+		assert(CountUsed() <= ref_limit);
+	}
+
 };
 
 // Other helpers:
